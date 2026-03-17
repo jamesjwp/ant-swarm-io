@@ -16,13 +16,34 @@ export default class GameScene extends Phaser.Scene {
   // ── Phaser lifecycle ───────────────────────────────────────────────────
 
   preload() {
-    // No external assets — everything is generated in create()
+    // Walk animations — 6 frames × 4 cardinal directions
+    for (const dir of ['north', 'south', 'east', 'west']) {
+      for (let i = 0; i < 6; i++) {
+        this.load.image(`walk-${dir}-${i}`, `assets/animations/walk/${dir}/frame_00${i}.png`);
+      }
+    }
+
+    // Breathing idle — south only, 4 frames
+    for (let i = 0; i < 4; i++) {
+      this.load.image(`idle-south-${i}`, `assets/animations/breathing-idle/south/frame_00${i}.png`);
+    }
+
+    // Static directional sprites (used for diagonal movement)
+    for (const dir of ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west']) {
+      this.load.image(`rotate-${dir}`, `assets/rotations/${dir}.png`);
+    }
+
+    // Ground tiles from the Spring outdoor tileset
+    this.load.image('grass-bg',       'assets/tiles/grass-bg.png');
+    this.load.image('flower-tiles',   'assets/tiles/flower-field.png');
+    this.load.image('depleted-tiles', 'assets/tiles/depleted-field.png');
   }
 
   create() {
     this.physics.world.setBounds(0, 0, WORLD_W, WORLD_H);
 
     this._generateTextures();
+    this._createAnims();
     this._createGround();
 
     // Game state
@@ -124,7 +145,7 @@ export default class GameScene extends Phaser.Scene {
 
   /** Returns the FoodField whose tile the player is standing on, or null. */
   _getFieldUnder(px, py) {
-    const HALF = 22;   // half of the 44 px tile size
+    const HALF = 16;   // half of the 32 px tile size
     for (const zone of this.zones) {
       for (const field of zone.fields) {
         if (!field.isDepleted &&
@@ -146,7 +167,7 @@ export default class GameScene extends Phaser.Scene {
 
   _createZones() {
     const farmH   = WORLD_H - VILLAGE_H;
-    const SPACING = 60;
+    const SPACING = 32;
     const fields  = [];
 
     for (let y = SPACING / 2; y < farmH; y += SPACING) {
@@ -160,22 +181,9 @@ export default class GameScene extends Phaser.Scene {
   }
 
   _createGround() {
-    // Tiled grass background
-    const g = this.make.graphics({ add: false });
-    g.fillStyle(0x3d7a2e);
-    g.fillRect(0, 0, 128, 128);
-    // Small random grass tufts for texture
-    for (let i = 0; i < 30; i++) {
-      g.fillStyle(0x357020, 0.6);
-      g.fillRect(
-        Math.random() * 124, Math.random() * 120,
-        2 + Math.random() * 3, 4 + Math.random() * 8,
-      );
-    }
-    g.generateTexture('grass', 128, 128);
-    g.destroy();
-
-    this.add.tileSprite(WORLD_W / 2, WORLD_H / 2, WORLD_W, WORLD_H, 'grass').setDepth(-1);
+    // Spring grass background — 16×16 tile scaled 2× for a clean pixel art look
+    this.add.tileSprite(WORLD_W / 2, WORLD_H / 2, WORLD_W, WORLD_H, 'grass-bg')
+      .setDepth(-1).setTileScale(2, 2);
 
     // Village ground — warm earthy overlay over the bottom strip
     const village = this.add.graphics().setDepth(0);
@@ -191,6 +199,24 @@ export default class GameScene extends Phaser.Scene {
     border.strokeRect(3, 3, WORLD_W - 6, WORLD_H - 6);
   }
 
+  _createAnims() {
+    for (const dir of ['north', 'south', 'east', 'west']) {
+      this.anims.create({
+        key: `walk-${dir}`,
+        frames: Array.from({ length: 6 }, (_, i) => ({ key: `walk-${dir}-${i}` })),
+        frameRate: 10,
+        repeat: -1,
+      });
+    }
+
+    this.anims.create({
+      key: 'idle-south',
+      frames: Array.from({ length: 4 }, (_, i) => ({ key: `idle-south-${i}` })),
+      frameRate: 4,
+      repeat: -1,
+    });
+  }
+
   _generateTextures() {
     const make = (fn, w, h, key) => {
       const g = this.make.graphics({ add: false });
@@ -198,42 +224,6 @@ export default class GameScene extends Phaser.Scene {
       g.generateTexture(key, w, h);
       g.destroy();
     };
-
-    // ── Beekeeper (player) — cream suit sphere + dome hat + veil ────────
-    make(g => {
-      // Ground shadow
-      g.fillStyle(0x000000, 0.18);
-      g.fillEllipse(29, 60, 38, 10);
-
-      // Suit body — cream sphere
-      g.fillStyle(0xf0ece0);
-      g.fillCircle(26, 43, 18);
-      // Sphere highlight (top-left)
-      g.fillStyle(0xffffff, 0.5);
-      g.fillCircle(20, 37, 7);
-      // Suit shading (bottom-right)
-      g.fillStyle(0x8a7a50, 0.22);
-      g.fillEllipse(31, 50, 18, 9);
-
-      // Hat brim
-      g.fillStyle(0xf2efe5);
-      g.fillRoundedRect(9, 18, 34, 6, 3);
-      // Hat dome
-      g.fillStyle(0xf2efe5);
-      g.fillRoundedRect(14, 4, 24, 18, 8);
-      // Hat band
-      g.fillStyle(0x1e1e14);
-      g.fillRect(9, 21, 34, 3);
-      // Veil mesh (translucent rect)
-      g.fillStyle(0xbbb8a0, 0.22);
-      g.fillRect(9, 24, 34, 18);
-
-      // Outlines
-      g.lineStyle(1.5, 0x2a2210, 0.65);
-      g.strokeCircle(26, 43, 18);
-      g.strokeRoundedRect(9, 18, 34, 6, 3);
-      g.strokeRoundedRect(14, 4, 24, 18, 8);
-    }, 52, 62, 'player');
 
     // ── Bee — striped yellow-and-black circle ────────────────────────────
     make(g => {
@@ -261,18 +251,5 @@ export default class GameScene extends Phaser.Scene {
       g.strokeCircle(12, 7, 6);
     }, 24, 14, 'ant');
 
-    // ── Flower patch — active (golden yellow outline + depth shadow) ──────
-    make(g => {
-      g.fillStyle(0x7a6000, 0.35);
-      g.fillRoundedRect(3, 4, 40, 40, 8);   // depth shadow
-      g.lineStyle(2, 0xf5c800, 0.9);
-      g.strokeRoundedRect(2, 2, 40, 40, 8);
-    }, 44, 44, 'foodField');
-
-    // ── Flower patch — harvested (muted golden fill) ──────────────────────
-    make(g => {
-      g.fillStyle(0xc49a00, 0.75);
-      g.fillRoundedRect(2, 2, 40, 40, 8);
-    }, 44, 44, 'foodFieldDepleted');
   }
 }

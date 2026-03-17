@@ -6,7 +6,7 @@ export default class FoodField {
     this._x    = x;
     this._y    = y;
 
-    this.sprite = scene.add.image(x, y, 'foodField');
+    this.sprite = scene.add.image(x, y, 'flower-tiles');
     this.sprite.setDepth(1);
 
     this.assignedAnt = null;   // the one ant currently claiming / farming this field
@@ -40,13 +40,13 @@ export default class FoodField {
     gfx.clear();
     if (pct <= 0) return;
 
-    const W    = 38;
-    const maxH = 38;
+    const W    = 28;
+    const maxH = 28;
     const H    = Math.max(2, Math.round(maxH * pct));
-    const r    = Math.min(6, H / 2);
+    const r    = Math.min(4, H / 2);
 
-    gfx.fillStyle(0xf5c800, 0.9);   // golden yellow to match the tile theme
-    gfx.fillRoundedRect(this._x - 19, this._y + 19 - H, W, H, r);
+    gfx.fillStyle(0xf5c800, 0.9);
+    gfx.fillRoundedRect(this._x - 14, this._y + 14 - H, W, H, r);
   }
 
   /** Called when the ant finishes farming — depletes the tile. */
@@ -66,7 +66,7 @@ export default class FoodField {
 
   _deplete() {
     this.isDepleted = true;
-    this.sprite.setTexture('foodFieldDepleted');
+    this.sprite.setTexture('depleted-tiles');
     this.sprite.setScale(1);
 
     // Punch-scale flash on depletion
@@ -83,7 +83,7 @@ export default class FoodField {
     this.scene.time.delayedCall(REGEN_MS, () => {
       this.isDepleted  = false;
       this.assignedAnt = null;
-      this.sprite.setTexture('foodField');
+      this.sprite.setTexture('flower-tiles');
       this.sprite.setAlpha(0);
       // Fade back in
       this.scene.tweens.add({
