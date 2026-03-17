@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Vite build output
+dist/
+dist-ssr/
+
+# Local Claude settings (machine-specific)
+.claude/settings.local.json
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.local
