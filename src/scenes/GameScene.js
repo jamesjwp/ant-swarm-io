@@ -16,7 +16,10 @@ export default class GameScene extends Phaser.Scene {
   // ── Phaser lifecycle ───────────────────────────────────────────────────
 
   preload() {
-    // No external assets — everything is generated in create()
+    const dirs = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+    for (const dir of dirs) {
+      this.load.image(`player_${dir}`, `assets/${dir}.png`);
+    }
   }
 
   create() {
@@ -198,42 +201,6 @@ export default class GameScene extends Phaser.Scene {
       g.generateTexture(key, w, h);
       g.destroy();
     };
-
-    // ── Beekeeper (player) — cream suit sphere + dome hat + veil ────────
-    make(g => {
-      // Ground shadow
-      g.fillStyle(0x000000, 0.18);
-      g.fillEllipse(29, 60, 38, 10);
-
-      // Suit body — cream sphere
-      g.fillStyle(0xf0ece0);
-      g.fillCircle(26, 43, 18);
-      // Sphere highlight (top-left)
-      g.fillStyle(0xffffff, 0.5);
-      g.fillCircle(20, 37, 7);
-      // Suit shading (bottom-right)
-      g.fillStyle(0x8a7a50, 0.22);
-      g.fillEllipse(31, 50, 18, 9);
-
-      // Hat brim
-      g.fillStyle(0xf2efe5);
-      g.fillRoundedRect(9, 18, 34, 6, 3);
-      // Hat dome
-      g.fillStyle(0xf2efe5);
-      g.fillRoundedRect(14, 4, 24, 18, 8);
-      // Hat band
-      g.fillStyle(0x1e1e14);
-      g.fillRect(9, 21, 34, 3);
-      // Veil mesh (translucent rect)
-      g.fillStyle(0xbbb8a0, 0.22);
-      g.fillRect(9, 24, 34, 18);
-
-      // Outlines
-      g.lineStyle(1.5, 0x2a2210, 0.65);
-      g.strokeCircle(26, 43, 18);
-      g.strokeRoundedRect(9, 18, 34, 6, 3);
-      g.strokeRoundedRect(14, 4, 24, 18, 8);
-    }, 52, 62, 'player');
 
     // ── Bee — striped yellow-and-black circle ────────────────────────────
     make(g => {

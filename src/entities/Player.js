@@ -1,24 +1,24 @@
 const MAX_SPEED = 300;   // px/s top speed
 const ACCEL     = 2400;  // px/s² — snappy build-up (~0.12 s to full speed)
 const DRAG      = 1600;  // px/s² — stops cleanly when keys released (~0.19 s)
+const SCALE     = 3;     // pixel-art upscale
 
 export default class Player {
   constructor(scene, x, y) {
-    this.scene = scene;
+    this.scene   = scene;
+    this._facing = 'south';
 
-    this.sprite = scene.physics.add.image(x, y, 'player');
+    this.sprite = scene.physics.add.sprite(x, y, 'player_south');
+    this.sprite.setScale(SCALE);
     this.sprite.setDepth(4);
     this.sprite.setCollideWorldBounds(true);
 
-    // Shift the origin so the world position tracks the suit body centre
-    // (texture is 52×62; body centre is at pixel (26, 43))
-    this.sprite.setOrigin(0.5, 43 / 62);
+    // Circular physics body — adjust radius/offsets if sprite size changes
+    const hw = this.sprite.width  * SCALE / 2;
+    const hh = this.sprite.height * SCALE / 2;
+    const r  = Math.min(hw, hh) * 0.45;
+    this.sprite.body.setCircle(r, hw - r, hh - r * 0.5);
 
-    // Circular physics body centred on the suit (not the hat)
-    // setCircle(radius, offsetX, offsetY) — offsets from the body's top-left
-    this.sprite.body.setCircle(18, 8, 25);
-
-    // Acceleration-based movement with linear drag
     this.sprite.body.setMaxVelocity(MAX_SPEED, MAX_SPEED);
     this.sprite.body.setDrag(DRAG, DRAG);
 
@@ -40,10 +40,30 @@ export default class Player {
     if (up.isDown)    ay -= ACCEL;
     if (down.isDown)  ay += ACCEL;
 
-    // Normalise diagonal acceleration so it isn't faster
     if (ax !== 0 && ay !== 0) { ax *= 0.707; ay *= 0.707; }
 
     this.sprite.body.setAcceleration(ax, ay);
+
+    // Update facing sprite when moving
+    if (ax !== 0 || ay !== 0) {
+      const dir = this._dirFromVector(ax, ay);
+      if (dir !== this._facing) {
+        this._facing = dir;
+        this.sprite.setTexture(`player_${dir}`);
+      }
+    }
+  }
+
+  _dirFromVector(ax, ay) {
+    const angle = Math.atan2(ay, ax) * 180 / Math.PI;
+    if (angle >= -22.5  && angle <  22.5)  return 'east';
+    if (angle >=  22.5  && angle <  67.5)  return 'south-east';
+    if (angle >=  67.5  && angle < 112.5)  return 'south';
+    if (angle >= 112.5  && angle < 157.5)  return 'south-west';
+    if (angle >=  157.5 || angle < -157.5) return 'west';
+    if (angle >= -157.5 && angle < -112.5) return 'north-west';
+    if (angle >= -112.5 && angle <  -67.5) return 'north';
+    return 'north-east';
   }
 
   get x() { return this.sprite.x; }
