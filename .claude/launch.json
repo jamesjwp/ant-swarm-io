@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "ant-swarm-io",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "cd /Users/james/ant-swarm-io/.claude/worktrees/hardcore-cannon && npm run dev"],
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "npm run dev"],
       "port": 5173
     }
   ]
