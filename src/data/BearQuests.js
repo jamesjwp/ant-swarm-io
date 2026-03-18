@@ -60,6 +60,102 @@ export const BEAR_QUESTS = [
   },
 ];
 
+// Quests given by the Brown Bear NPC (mid-field, focuses on honey volume, streaks, and bees).
+export const BROWN_BEAR_QUESTS = [
+  {
+    id: 'bb_honey_100',
+    desc: 'Collect 100 honey total',
+    icon: '🍯',
+    progress: gs => `${Math.min(gs.totalHoney, 100)}/100`,
+    check:    gs => gs.totalHoney >= 100,
+    reward:   { tickets: 8, sprouts: 1 },
+  },
+  {
+    id: 'bb_bees_8',
+    desc: 'Own 8 bees',
+    icon: '🐝',
+    progress: gs => `${gs.ownedBees.length}/8`,
+    check:    gs => gs.ownedBees.length >= 8,
+    reward:   { tickets: 12 },
+  },
+  {
+    id: 'bb_cash_300',
+    desc: 'Earn 300 cash total',
+    icon: '💰',
+    progress: gs => `${Math.min(gs.totalCash, 300)}/300`,
+    check:    gs => gs.totalCash >= 300,
+    reward:   { tickets: 15 },
+  },
+  {
+    id: 'bb_streak_20',
+    desc: 'Reach a ×2.0 honey streak',
+    icon: '🔥',
+    progress: gs => `×${(gs.comboMult ?? 1).toFixed(1)}/×2.0`,
+    check:    gs => (gs.comboMult ?? 1) >= 2.0,
+    reward:   { tickets: 20, sprouts: 2 },
+  },
+  {
+    id: 'bb_weather_5',
+    desc: 'Survive 5 weather events',
+    icon: '⛅',
+    progress: gs => `${Math.min(gs._weatherCount ?? 0, 5)}/5`,
+    check:    gs => (gs._weatherCount ?? 0) >= 5,
+    reward:   { tickets: 25 },
+  },
+  {
+    id: 'bb_honey_1500',
+    desc: 'Collect 1,500 honey total',
+    icon: '🏆',
+    progress: gs => `${Math.min(gs.totalHoney, 1500)}/1500`,
+    check:    gs => gs.totalHoney >= 1500,
+    reward:   { tickets: 40, sprouts: 4 },
+  },
+];
+
+// Quests given by the Spirit Bear NPC (deep north, late-game with big rewards including consumables).
+export const SPIRIT_BEAR_QUESTS = [
+  {
+    id: 'sb_gifted_bee',
+    desc: 'Hatch a Gifted bee',
+    icon: '✨',
+    progress: gs => gs.ownedBees.some(b => b.gifted) ? '1/1' : '0/1',
+    check:    gs => gs.ownedBees.some(b => b.gifted),
+    reward:   { tickets: 30, starTreats: 1 },
+  },
+  {
+    id: 'sb_honey_5000',
+    desc: 'Collect 5,000 honey total',
+    icon: '🍯',
+    progress: gs => `${Math.min(gs.totalHoney, 5000)}/5000`,
+    check:    gs => gs.totalHoney >= 5000,
+    reward:   { tickets: 60, royalJellies: 1 },
+  },
+  {
+    id: 'sb_bond_max',
+    desc: 'Max bond a bee to Lv. 5',
+    icon: '🤝',
+    progress: gs => gs.ownedBees.some(b => (b.bond ?? 0) >= 500) ? '1/1' : '0/1',
+    check:    gs => gs.ownedBees.some(b => (b.bond ?? 0) >= 500),
+    reward:   { tickets: 50, starTreats: 2 },
+  },
+  {
+    id: 'sb_all_zones',
+    desc: 'Explore all 6 field zones',
+    icon: '🗺',
+    progress: gs => `${gs._visitedZones?.size ?? 0}/6`,
+    check:    gs => (gs._visitedZones?.size ?? 0) >= 6,
+    reward:   { tickets: 40, royalJellies: 1 },
+  },
+  {
+    id: 'sb_level_12',
+    desc: 'Reach level 12',
+    icon: '🌟',
+    progress: gs => `Lv. ${gs.level}/12`,
+    check:    gs => gs.level >= 12,
+    reward:   { tickets: 80, starTreats: 3 },
+  },
+];
+
 // Quests given by the Mother Bear NPC (mid-zone, slightly harder than Black Bear's intro quests).
 export const MOTHER_BEAR_QUESTS = [
   {

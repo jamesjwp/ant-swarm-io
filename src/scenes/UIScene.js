@@ -289,10 +289,12 @@ export default class UIScene extends Phaser.Scene {
 
     // Static NPCs
     const npcs = [
-      { x: gs.homeTile?.x, y: gs.homeTile?.y, color: 0xffff44, w: 4, h: 4 },
-      { x: gs.shop?.x,     y: gs.shop?.y,     color: 0x44ff88, w: 4, h: 4 },
-      { x: gs.bear?.x,     y: gs.bear?.y,     color: 0xcc7733, w: 3, h: 3 },
+      { x: gs.homeTile?.x,   y: gs.homeTile?.y,   color: 0xffff44, w: 4, h: 4 },
+      { x: gs.shop?.x,       y: gs.shop?.y,       color: 0x44ff88, w: 4, h: 4 },
+      { x: gs.bear?.x,       y: gs.bear?.y,       color: 0xcc7733, w: 3, h: 3 },
       { x: gs.motherBear?.x, y: gs.motherBear?.y, color: 0xff8844, w: 3, h: 3 },
+      { x: gs.brownBear?.x,  y: gs.brownBear?.y,  color: 0x8b4513, w: 3, h: 3 },
+      { x: gs.spiritBear?.x, y: gs.spiritBear?.y, color: 0xaabbff, w: 3, h: 3 },
     ];
     for (const n of npcs) {
       if (n.x == null) continue;

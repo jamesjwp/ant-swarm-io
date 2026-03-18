@@ -11,7 +11,7 @@ import { BADGES }  from '../data/Badges.js';
 import { BEE_TYPES, getRandomBeeType, getEggBeeType, getBondLevel } from '../data/BeeTypes.js';
 import { SHOP_ITEMS } from '../data/ShopItems.js';
 import { FIELD_ZONES, getZoneForY } from '../data/FieldZones.js';
-import { BEAR_QUESTS, MOTHER_BEAR_QUESTS } from '../data/BearQuests.js';
+import { BEAR_QUESTS, MOTHER_BEAR_QUESTS, BROWN_BEAR_QUESTS, SPIRIT_BEAR_QUESTS } from '../data/BearQuests.js';
 
 const WORLD_W   = 3200;
 const WORLD_H   = 3200;
@@ -54,6 +54,7 @@ export default class GameScene extends Phaser.Scene {
       this.load.image(`player-idle-${i}`, `assets/player/animations/breathing-idle/south/frame_00${i}.png`);
     this.load.image('bear-npc-south',        'assets/npc/bear/south.png');
     this.load.image('mother-bear-npc-south', 'assets/npc/mother-bear/south.png');
+    // brown-bear and spirit-bear use procedural textures generated in _generateTextures()
     this.load.image('grass-bg',       'assets/tiles/grass-bg.png');
     this.load.image('flower-tiles',   'assets/tiles/flower-field.png');
     this.load.image('depleted-tiles', 'assets/tiles/depleted-field.png');
@@ -97,6 +98,8 @@ export default class GameScene extends Phaser.Scene {
     this.ladybugs         = [];
     this.bearQuests       = BEAR_QUESTS.map(q => ({ ...q, claimed: false }));
     this.motherBearQuests = MOTHER_BEAR_QUESTS.map(q => ({ ...q, claimed: false }));
+    this.brownBearQuests  = BROWN_BEAR_QUESTS.map(q => ({ ...q, claimed: false }));
+    this.spiritBearQuests = SPIRIT_BEAR_QUESTS.map(q => ({ ...q, claimed: false }));
     this._activeBear      = 'black';
     this.starTreats       = 0;
     this.royalJellies     = 0;
@@ -114,16 +117,18 @@ export default class GameScene extends Phaser.Scene {
     this.statAlloc = { agility: 0, capacity: 0, commerce: 0, fortune: 0 };
 
     // Harvest streak (combo multiplier)
-    this.comboCount  = 0;
-    this.comboMult   = 1.0;
-    this._comboTimer = 0;
+    this.comboCount     = 0;
+    this.comboMult      = 1.0;
+    this._comboTimer    = 0;
+    this._comboFireTimer = 0;
 
     // Weather events
     this.weather        = null;
     this._weatherCount  = 0;
 
-    // Achievement badges
-    this.badges        = new Set();
+    // Achievement badges (persist across sessions via localStorage)
+    const _savedBadges = JSON.parse(localStorage.getItem('ant_badges') ?? '[]');
+    this.badges        = new Set(_savedBadges);
     this._visitedZones = new Set();
 
     this.player   = new Player(this, WORLD_W / 2, WORLD_H - VILLAGE_H / 2);
@@ -135,6 +140,18 @@ export default class GameScene extends Phaser.Scene {
       textureKey: 'mother-bear-npc-south',
       questsKey:  'motherBearQuests',
       bearId:     'mother',
+    });
+    this.brownBear   = new Bear(this, WORLD_W * 3 / 4,   WORLD_H / 2, {
+      label:      'Brown Bear',
+      textureKey: 'brown-bear-npc',
+      questsKey:  'brownBearQuests',
+      bearId:     'brown',
+    });
+    this.spiritBear  = new Bear(this, WORLD_W / 2,        400, {
+      label:      'Spirit Bear',
+      textureKey: 'spirit-bear-npc',
+      questsKey:  'spiritBearQuests',
+      bearId:     'spirit',
     });
     this._createZone();
 
@@ -172,11 +189,15 @@ export default class GameScene extends Phaser.Scene {
     const nearShop        = this.shop.update(this.player.x, this.player.y);
     const nearBear        = this.bear.update(this.player.x, this.player.y);
     const nearMotherBear  = this.motherBear.update(this.player.x, this.player.y);
+    const nearBrownBear   = this.brownBear.update(this.player.x, this.player.y);
+    const nearSpiritBear  = this.spiritBear.update(this.player.x, this.player.y);
     if (Phaser.Input.Keyboard.JustDown(this.eKey)) {
-      if (nearShop)            this._toggleShop();
-      else if (nearBear)       { this._activeBear = 'black';  this._toggleBear(); }
-      else if (nearMotherBear) { this._activeBear = 'mother'; this._toggleBear(); }
-      else if (nearHome)       this._cashOut();
+      if (nearShop)             this._toggleShop();
+      else if (nearBear)        { this._activeBear = 'black';  this._toggleBear(); }
+      else if (nearMotherBear)  { this._activeBear = 'mother'; this._toggleBear(); }
+      else if (nearBrownBear)   { this._activeBear = 'brown';  this._toggleBear(); }
+      else if (nearSpiritBear)  { this._activeBear = 'spirit'; this._toggleBear(); }
+      else if (nearHome)        this._cashOut();
     }
     if (Phaser.Input.Keyboard.JustDown(this.fKey)) this._plantSprout();
 
@@ -191,6 +212,17 @@ export default class GameScene extends Phaser.Scene {
     if (this._comboTimer > 0) {
       this._comboTimer -= delta;
       if (this._comboTimer <= 0) { this.comboCount = 0; this.comboMult = 1.0; }
+    }
+
+    // Combo fire visual at high streaks (≥ 2.0×)
+    if (this.comboMult >= 2.0 && this._comboTimer > 0) {
+      this._comboFireTimer -= delta;
+      if (this._comboFireTimer <= 0) {
+        this._comboFireTimer = 60;
+        this._emitComboFlame();
+      }
+    } else {
+      this._comboFireTimer = 0;
     }
 
     // Weather countdown
@@ -440,13 +472,19 @@ export default class GameScene extends Phaser.Scene {
   }
 
   claimBearQuest(id, bearType = 'black') {
-    const pool = bearType === 'mother' ? this.motherBearQuests : this.bearQuests;
-    const q    = pool.find(q => q.id === id);
+    let pool;
+    if      (bearType === 'mother') pool = this.motherBearQuests;
+    else if (bearType === 'brown')  pool = this.brownBearQuests;
+    else if (bearType === 'spirit') pool = this.spiritBearQuests;
+    else                            pool = this.bearQuests;
+    const q = pool.find(q => q.id === id);
     if (!q || q.claimed || !q.check(this)) return;
     q.claimed = true;
     const parts = [];
-    if (q.reward.tickets) { this.tickets  += q.reward.tickets;  parts.push(`+${q.reward.tickets} 🎫`); }
-    if (q.reward.sprouts) { this.sprouts  += q.reward.sprouts;  parts.push(`+${q.reward.sprouts} 🌱`); }
+    if (q.reward.tickets)      { this.tickets      += q.reward.tickets;      parts.push(`+${q.reward.tickets} 🎫`); }
+    if (q.reward.sprouts)      { this.sprouts      += q.reward.sprouts;      parts.push(`+${q.reward.sprouts} 🌱`); }
+    if (q.reward.starTreats)   { this.starTreats   += q.reward.starTreats;   parts.push(`+${q.reward.starTreats} ⭐`); }
+    if (q.reward.royalJellies) { this.royalJellies += q.reward.royalJellies; parts.push(`+${q.reward.royalJellies} 👑`); }
     spawnFloatText(this, this.player.x, this.player.y - 60, `Quest! ${parts.join('  ')}`, '#ffff88');
   }
 
@@ -572,6 +610,20 @@ export default class GameScene extends Phaser.Scene {
       g.fillRect(9,1,1,1); g.fillRect(4,7,1,1); g.fillRect(15,12,1,1); g.fillRect(11,9,1,1);
     }, 16, 16, 'dirt-bg');
     for (const type of Object.values(BEE_TYPES)) this._makeBeeTexture(type.textureKey, type.bodyColor, type.stripeColor);
+    this._makeBearTexture('brown-bear-npc',  0x8b4513, 0xd2691e);
+    this._makeBearTexture('spirit-bear-npc', 0xe0eeff, 0xaabbff);
+  }
+
+  _makeBearTexture(key, bodyColor, earInnerColor) {
+    const g = this.make.graphics({ add: false });
+    g.fillStyle(0x000000, 0.18); g.fillEllipse(16, 26, 22, 7);
+    g.fillStyle(bodyColor, 1);   g.fillEllipse(16, 16, 20, 19);
+    g.fillStyle(bodyColor, 1);   g.fillCircle(8, 7, 4.5); g.fillCircle(24, 7, 4.5);
+    g.fillStyle(earInnerColor);  g.fillCircle(8, 7, 2.5); g.fillCircle(24, 7, 2.5);
+    g.fillStyle(0x4a3020);       g.fillEllipse(16, 19, 11, 8);
+    g.fillStyle(0x1a0a00);       g.fillEllipse(16, 16, 5, 3);
+    g.fillStyle(0x000000);       g.fillCircle(11, 13, 1.8); g.fillCircle(21, 13, 1.8);
+    g.generateTexture(key, 32, 32); g.destroy();
   }
 
   _makeBeeTexture(key, bodyColor, stripeColor) {
@@ -582,6 +634,27 @@ export default class GameScene extends Phaser.Scene {
     g.fillStyle(stripeColor, 0.88); g.fillEllipse(12, 4.5, 8, 2.2); g.fillEllipse(12, 7, 10, 2.2); g.fillEllipse(12, 9.5, 8, 2.2);
     g.lineStyle(1, 0x2a1400, 0.5);  g.strokeCircle(12, 7, 6);
     g.generateTexture(key, 24, 14); g.destroy();
+  }
+
+  // ── Combo Fire Visual ─────────────────────────────────────────────────────
+
+  _emitComboFlame() {
+    const COLORS = [0xff4400, 0xff8800, 0xffdd44, 0xff2200];
+    const color  = COLORS[Math.floor(Math.random() * COLORS.length)];
+    const ox     = Phaser.Math.Between(-14, 14);
+    const oy     = Phaser.Math.Between(-4, 4);
+    const r      = Phaser.Math.Between(3, 7);
+    const spark  = this.add.circle(this.player.x + ox, this.player.y - 6 + oy, r, color, 0.92).setDepth(9997);
+    this.tweens.add({
+      targets: spark,
+      y:       spark.y - Phaser.Math.Between(22, 44),
+      x:       spark.x + Phaser.Math.Between(-12, 12),
+      alpha:   0,
+      scale:   0,
+      duration: Phaser.Math.Between(280, 480),
+      ease: 'Quad.Out',
+      onComplete: () => spark.destroy(),
+    });
   }
 
   // ── Day / Night ───────────────────────────────────────────────────────────
@@ -634,8 +707,9 @@ export default class GameScene extends Phaser.Scene {
 
   // ── Weather Events ────────────────────────────────────────────────────────
 
-  get weatherHoneyMult() { return this.weather?.id === 'golden_hour' ? 1.4 : 1.0; }
+  get weatherHoneyMult()  { return this.weather?.id === 'golden_hour' ? 1.4 : 1.0; }
   get weatherSpeedMult()  { return this.weather?.id === 'windstorm'   ? 1.6 : 1.0; }
+  get weatherRegenMult()  { return this.weather?.id === 'bloom_day'   ? 0.5 : 1.0; }
 
   _startWeatherSystem() {
     const schedule = () => {
@@ -652,6 +726,7 @@ export default class GameScene extends Phaser.Scene {
       { id: 'sunshower',   name: '☔ Sunshower',   color: 0x1133aa, alpha: 0.10, timeLeft: 50_000 },
       { id: 'windstorm',   name: '💨 Gusting Wind', color: 0x113322, alpha: 0.09, timeLeft: 45_000 },
       { id: 'golden_hour', name: '✨ Golden Hour',  color: 0x553300, alpha: 0.14, timeLeft: 55_000 },
+      { id: 'bloom_day',   name: '🌸 Bloom Day',    color: 0x003311, alpha: 0.08, timeLeft: 60_000 },
     ];
     const type = TYPES[Math.floor(Math.random() * TYPES.length)];
     this.weather = { ...type };
@@ -674,6 +749,7 @@ export default class GameScene extends Phaser.Scene {
     for (const b of BADGES) {
       if (this.badges.has(b.id) || !b.check(this)) continue;
       this.badges.add(b.id);
+      localStorage.setItem('ant_badges', JSON.stringify([...this.badges]));
       if (b.reward.tickets) this.tickets    += b.reward.tickets;
       if (b.reward.storage) this.storageMax += b.reward.storage;
       this._showBadgeUnlock(b);

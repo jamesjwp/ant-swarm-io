@@ -16,12 +16,12 @@ export default class BearScene extends Phaser.Scene {
     this.add.rectangle(PX + PW / 2, PY + PH / 2, PW, PH, 0x1a0f04, 0.97)
       .setStrokeStyle(2, 0xaa7733).setDepth(1);
 
-    // Title (updated dynamically in _rebuild)
+    // Title + dialog (updated dynamically in _rebuild)
     this._titleText = this.add.text(PX + PW / 2, PY + PAD + 10, '🐻  Black Bear', {
       fontSize: '22px', color: '#ffdd88', stroke: '#000', strokeThickness: 4, fontStyle: 'bold',
     }).setOrigin(0.5, 0).setDepth(2);
 
-    this.add.text(PX + PW / 2, PY + PAD + 42, '"Hello, young beekeeper! I have tasks for you."', {
+    this._dialogText = this.add.text(PX + PW / 2, PY + PAD + 42, '"Hello, young beekeeper! I have tasks for you."', {
       fontSize: '12px', color: '#ccaa88', stroke: '#000', strokeThickness: 2, fontStyle: 'italic',
     }).setOrigin(0.5, 0).setDepth(2);
 
@@ -51,12 +51,30 @@ export default class BearScene extends Phaser.Scene {
   _rebuild() {
     this._questContainer.removeAll(true);
 
-    const gs = this.scene.get('GameScene');
-    const isMother = gs?._activeBear === 'mother';
-    const quests   = isMother ? gs?.motherBearQuests : gs?.bearQuests;
+    const gs       = this.scene.get('GameScene');
+    const bearType = gs?._activeBear ?? 'black';
+    let quests, title, dialog;
+    if (bearType === 'mother') {
+      quests = gs?.motherBearQuests;
+      title  = '🐻  Mother Bear';
+      dialog = '"Hello, young beekeeper! I have tasks for you."';
+    } else if (bearType === 'brown') {
+      quests = gs?.brownBearQuests;
+      title  = '🐻  Brown Bear';
+      dialog = '"Hey there, keeper! Push yourself — I\'ve got real challenges."';
+    } else if (bearType === 'spirit') {
+      quests = gs?.spiritBearQuests;
+      title  = '✨  Spirit Bear';
+      dialog = '"Greetings, wanderer... prove your worth to the hive."';
+    } else {
+      quests = gs?.bearQuests;
+      title  = '🐻  Black Bear';
+      dialog = '"Hello, young beekeeper! I have tasks for you."';
+    }
     if (!quests) return;
 
-    this._titleText.setText(isMother ? '🐻  Mother Bear' : '🐻  Black Bear');
+    this._titleText.setText(title);
+    this._dialogText.setText(dialog);
 
     const rowH   = 58;
     const startY = PY + 90;
@@ -89,8 +107,10 @@ export default class BearScene extends Phaser.Scene {
 
       // Reward label
       const rewardParts = [];
-      if (q.reward.tickets) rewardParts.push(`+${q.reward.tickets} 🎫`);
-      if (q.reward.sprouts) rewardParts.push(`+${q.reward.sprouts} 🌱`);
+      if (q.reward.tickets)      rewardParts.push(`+${q.reward.tickets} 🎫`);
+      if (q.reward.sprouts)      rewardParts.push(`+${q.reward.sprouts} 🌱`);
+      if (q.reward.starTreats)   rewardParts.push(`+${q.reward.starTreats} ⭐`);
+      if (q.reward.royalJellies) rewardParts.push(`+${q.reward.royalJellies} 👑`);
       const rewardText = this.add.text(PX + PW - PAD - (done && !q.claimed ? 80 : 10),
         ry + rowH / 2 - 4, rewardParts.join('  '), {
           fontSize: '12px', color: '#ffee88', stroke: '#000', strokeThickness: 2,
@@ -102,7 +122,7 @@ export default class BearScene extends Phaser.Scene {
         claimBtn = this.add.text(PX + PW - PAD - 4, ry + rowH / 2 - 4, '[ Claim! ]', {
           fontSize: '13px', color: '#ffff44', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
         }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true });
-        claimBtn.on('pointerdown', () => { gs.claimBearQuest(q.id, isMother ? 'mother' : 'black'); this._rebuild(); });
+        claimBtn.on('pointerdown', () => { gs.claimBearQuest(q.id, bearType); this._rebuild(); });
         claimBtn.on('pointerover',  () => claimBtn.setColor('#ffffff'));
         claimBtn.on('pointerout',   () => claimBtn.setColor('#ffff44'));
       }
