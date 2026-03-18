@@ -201,6 +201,7 @@ export default class HiveScene extends Phaser.Scene {
 
     this._invW = W; this._invH = H;
     this._rebuildInv();
+    this._buildBeeTooltip();
   }
 
   _rebuildInv() {
@@ -213,30 +214,140 @@ export default class HiveScene extends Phaser.Scene {
     const OY  = 52 + INV_R;
 
     for (let i = 0; i < gs.ownedBees.length; i++) {
-      const entry = gs.ownedBees[i];
-      const col = i % INV_COLS, row = Math.floor(i / INV_COLS);
-      const lx  = OX + col * CW + (row & 1) * (CW / 2);
-      const ly  = OY + row * RH;
-      const isEq = !!entry.ant;
+      const entry  = gs.ownedBees[i];
+      const col    = i % INV_COLS, row = Math.floor(i / INV_COLS);
+      const lx     = OX + col * CW + (row & 1) * (CW / 2);
+      const ly     = OY + row * RH;
+      const isEq   = !!entry.ant;
+      const bondLv = Math.min(5, Math.floor((entry.bond ?? 0) / 100));
 
       const g = this.add.graphics();
-      drawHex(g, lx, ly, INV_R,
-        isEq ? 0x1e1600 : 0x110e07, 1,
-        isEq ? 0xc8a030 : 0x7a5c20, isEq ? 0.6 : 0.45, isEq ? 2 : 1);
+      // Gifted bees get a golden sparkle border
+      if (entry.gifted) {
+        drawHex(g, lx, ly, INV_R,
+          isEq ? 0x1e1600 : 0x110e07, 1,
+          0xffd700, 1, 2);
+      } else {
+        drawHex(g, lx, ly, INV_R,
+          isEq ? 0x1e1600 : 0x110e07, 1,
+          isEq ? 0xc8a030 : 0x7a5c20, isEq ? 0.6 : 0.45, isEq ? 2 : 1);
+      }
 
       const icon = this.add.image(lx, ly, entry.type.textureKey).setScale(2.4).setAlpha(isEq ? 0.35 : 1);
 
+      // Bond level indicator at bottom of hex
+      const bondItems = [];
+      if (bondLv > 0) {
+        const bondTxt = this.add.text(lx, ly + INV_R - 5, `♥${bondLv}`, {
+          fontSize: '8px', color: '#ff99cc', stroke: '#000', strokeThickness: 2,
+        }).setOrigin(0.5, 1);
+        bondItems.push(bondTxt);
+      }
+      // Gifted star overlay
+      if (entry.gifted) {
+        const star = this.add.text(lx + INV_R - 6, ly - INV_R + 4, '✨', { fontSize: '9px' }).setOrigin(0.5);
+        bondItems.push(star);
+      }
+
       if (isEq) {
         const dot = this.add.text(lx, ly + INV_R - 7, '●', { fontSize: '8px', color: '#f5c800' }).setOrigin(0.5);
-        this._invBeesCont.add([g, icon, dot]);
+        this._invBeesCont.add([g, icon, dot, ...bondItems]);
       } else {
         const hz = this.add.zone(lx, ly, INV_R * 2, INV_R * 1.8).setInteractive({ useHandCursor: true });
-        hz.on('pointerover', () => { g.clear(); drawHex(g, lx, ly, INV_R, 0x282010, 1, 0xffe060, 1, 2); });
-        hz.on('pointerout',  () => { g.clear(); drawHex(g, lx, ly, INV_R, 0x110e07, 1, 0x7a5c20, 0.45, 1); });
+        hz.on('pointerover', () => {
+          g.clear();
+          drawHex(g, lx, ly, INV_R, 0x282010, 1, entry.gifted ? 0xffd700 : 0xffe060, 1, 2);
+          this._showBeeTooltip(entry);
+        });
+        hz.on('pointerout', () => {
+          g.clear();
+          if (entry.gifted) {
+            drawHex(g, lx, ly, INV_R, 0x110e07, 1, 0xffd700, 1, 2);
+          } else {
+            drawHex(g, lx, ly, INV_R, 0x110e07, 1, 0x7a5c20, 0.45, 1);
+          }
+          this._hideBeeTooltip();
+        });
         hz.on('pointerdown', p => this._startBeeDrag(entry, p.x, p.y));
-        this._invBeesCont.add([g, icon, hz]);
+        this._invBeesCont.add([g, icon, hz, ...bondItems]);
       }
     }
+  }
+
+  _buildBeeTooltip() {
+    const W = this._invW, TY = 548, TH = 124;
+    const barX = 20, barW = W - 40;
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x0c0a06, 0.96);
+    bg.fillRoundedRect(8, TY, W - 16, TH, 4);
+    bg.lineStyle(1, 0x7a5c20, 0.7);
+    bg.strokeRoundedRect(8, TY, W - 16, TH, 4);
+
+    this._ttName    = this.add.text(W / 2, TY + 10, '', { fontSize: '12px', color: '#ddcc88', stroke: '#000', strokeThickness: 2 }).setOrigin(0.5, 0);
+    this._ttBond    = this.add.text(W / 2, TY + 28, '', { fontSize: '10px', color: '#aaddaa' }).setOrigin(0.5, 0);
+    const barBg     = this.add.rectangle(barX, TY + 44, barW, 7, 0x1a1408, 1).setOrigin(0, 0);
+    this._ttBarFill = this.add.rectangle(barX, TY + 44, 1, 7, 0xffaa00, 1).setOrigin(0, 0);
+    this._ttBarMaxW = barW;
+
+    this._ttStarBtn = this.add.text(W / 2 - 64, TY + 62, '⭐ Star Treat (0)', {
+      fontSize: '11px', color: '#ffff44', stroke: '#000', strokeThickness: 2,
+      backgroundColor: '#222200', padding: { x: 5, y: 3 },
+    }).setOrigin(0.5, 0).setInteractive({ useHandCursor: true });
+    this._ttStarBtn.on('pointerdown', () => {
+      const gs = this.scene.get('GameScene');
+      if (this._tooltipEntry && gs.applyStarTreat(this._tooltipEntry)) this._showBeeTooltip(this._tooltipEntry);
+    });
+    this._ttStarBtn.on('pointerover', () => this._ttStarBtn.setColor('#ffffff'));
+    this._ttStarBtn.on('pointerout',  () => this._ttStarBtn.setColor('#ffff44'));
+
+    this._ttJellyBtn = this.add.text(W / 2 + 70, TY + 62, '👑 Royal Jelly (0)', {
+      fontSize: '11px', color: '#ff88ff', stroke: '#000', strokeThickness: 2,
+      backgroundColor: '#220022', padding: { x: 5, y: 3 },
+    }).setOrigin(0.5, 0).setInteractive({ useHandCursor: true });
+    this._ttJellyBtn.on('pointerdown', () => {
+      const gs = this.scene.get('GameScene');
+      if (this._tooltipEntry && gs.applyRoyalJelly(this._tooltipEntry)) {
+        this._showBeeTooltip(this._tooltipEntry);
+        this._rebuildInv();
+      }
+    });
+    this._ttJellyBtn.on('pointerover', () => this._ttJellyBtn.setColor('#ffffff'));
+    this._ttJellyBtn.on('pointerout',  () => this._ttJellyBtn.setColor('#ff88ff'));
+
+    this._ttGifted = this.add.text(W / 2, TY + 92, '', { fontSize: '10px', color: '#ffffaa', stroke: '#000', strokeThickness: 2 }).setOrigin(0.5, 0);
+
+    this._tooltipCont = this.add.container(0, 0, [bg, this._ttName, this._ttBond, barBg, this._ttBarFill, this._ttStarBtn, this._ttJellyBtn, this._ttGifted]);
+    this._invWin.add(this._tooltipCont);
+    this._tooltipEntry = null;
+    this._tooltipCont.setVisible(false);
+  }
+
+  _showBeeTooltip(entry) {
+    this._tooltipEntry = entry;
+    const bond     = entry.bond ?? 0;
+    const bondLv   = Math.min(5, Math.floor(bond / 100));
+    const xpInLv   = bond % 100;
+    const isMax    = bondLv >= 5;
+    const statPct  = Math.round((entry.gifted ? 1.2 : 1.0) * (1 + bondLv * 0.05) * 100 - 100);
+
+    this._ttName.setText(`${entry.type.name}${entry.gifted ? '  ✨ Gifted' : ''}`);
+    this._ttBond.setText(isMax ? `Bond: MAX  (+${statPct}% stats)` : `Bond Lv.${bondLv}  ·  ${xpInLv}/100 XP  (+${statPct}% stats)`);
+    this._ttBarFill.width = isMax ? this._ttBarMaxW : Math.max(1, Math.round((xpInLv / 100) * this._ttBarMaxW));
+
+    const gs = this.scene.get('GameScene');
+    const stars   = gs?.starTreats   ?? 0;
+    const jellies = gs?.royalJellies ?? 0;
+    this._ttStarBtn.setText(`⭐ Star Treat (${stars})`).setVisible(stars > 0 && !isMax);
+    this._ttJellyBtn.setText(`👑 Royal Jelly (${jellies})`).setVisible(jellies > 0);
+    this._ttGifted.setText(entry.gifted ? '✨ Gifted: +20% stat bonus included' : '');
+
+    this._tooltipCont.setVisible(true);
+  }
+
+  _hideBeeTooltip() {
+    this._tooltipCont?.setVisible(false);
+    this._tooltipEntry = null;
   }
 
   // ── Bee drag ────────────────────────────────────────────────────────────

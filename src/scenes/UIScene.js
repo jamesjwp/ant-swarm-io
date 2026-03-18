@@ -31,10 +31,17 @@ export default class UIScene extends Phaser.Scene {
     this.cashBar    = makeBar(this, BX, LEFT + ROW_H * 1, 0x0a2a0a, 0x44cc44);
     this.cashVal    = this.add.text(BX + BAR_W + 6, LEFT + ROW_H * 1, '0', VAL_STYLE).setOrigin(0, 0.5);
 
-    // Row 2 — Tickets (static, no bar needed — shown only when > 0)
-    this.ticketText = this.add.text(BX + BAR_W + 6, LEFT + ROW_H * 1 + 14, '', {
+    // Below cash — tickets & sprouts (shown only when > 0)
+    this.ticketText = this.add.text(BX + BAR_W + 6, LEFT + ROW_H * 1 + 12, '', {
       fontSize: '11px', color: '#ffff88', stroke: '#000', strokeThickness: 2,
-    }).setOrigin(0, 0.5);
+    }).setOrigin(0, 0.5).setVisible(false);
+    this.sproutText = this.add.text(LEFT, LEFT + ROW_H * 1 + 12, '', {
+      fontSize: '11px', color: '#88ff99', stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0, 0.5).setVisible(false);
+    // Consumables row (star treats / royal jelly)
+    this.consumableText = this.add.text(LEFT, LEFT + ROW_H * 1 + 24, '', {
+      fontSize: '11px', color: '#ffddff', stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0, 0.5).setVisible(false);
 
     // Row 2 — XP
     this.levelText  = this.add.text(LEFT, LEFT + ROW_H * 2, 'Lv. 1', LABEL_STYLE).setOrigin(0, 0.5);
@@ -95,6 +102,23 @@ export default class UIScene extends Phaser.Scene {
       this.ticketText.setText(`🎫 ${gs.tickets} ticket${gs.tickets !== 1 ? 's' : ''}`).setVisible(true);
     } else {
       this.ticketText.setVisible(false);
+    }
+
+    // Sprouts
+    if (gs.sprouts > 0) {
+      this.sproutText.setText(`🌱 ${gs.sprouts} sprout${gs.sprouts !== 1 ? 's' : ''}  [F]`).setVisible(true);
+    } else {
+      this.sproutText.setVisible(false);
+    }
+
+    // Consumables
+    const parts = [];
+    if ((gs.starTreats   ?? 0) > 0) parts.push(`⭐×${gs.starTreats}`);
+    if ((gs.royalJellies ?? 0) > 0) parts.push(`👑×${gs.royalJellies}`);
+    if (parts.length) {
+      this.consumableText.setText(parts.join('  ')).setVisible(true);
+    } else {
+      this.consumableText.setVisible(false);
     }
   }
 
