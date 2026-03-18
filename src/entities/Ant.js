@@ -4,8 +4,6 @@ const DEPOSIT_MS        = 300;
 const FIELD_ARRIVE_DIST = 4;
 const HOME_ARRIVE_DIST  = 22;
 const TRAIL_CHECK_MS    = 800;
-const SEP_RADIUS        = 20;
-const SEP_FORCE         = 200;
 
 const S = Object.freeze({
   TRAILING: 'trailing', MOVING_TO_FIELD: 'movingToField',
@@ -17,10 +15,8 @@ export default class Ant {
     this.scene   = scene;
     this.beeType = beeType;
 
-    this.sprite = scene.physics.add.image(x, y, beeType.textureKey);
-    this.sprite.setCollideWorldBounds(true);
-    this.sprite.body.setDamping(false);
-    this.sprite.body.setCircle(5, 7, 2);
+    this.sprite = scene.add.image(x, y, 'bee-south');
+    this.sprite.setScale(0.5);
 
     this.state       = S.TRAILING;
     this.targetField = null;
@@ -33,18 +29,22 @@ export default class Ant {
     const idx        = scene.ants.length;
     this.orbitRadius = 40 + (idx % 4) * 14;
     this.orbitAngle  = (idx / 8) * Math.PI * 2 + Math.random() * 0.8;
-    this.orbitSpeed  = 1.0 + Math.random() * 0.5;
   }
+
+  get x() { return this.sprite.x; }
+  get y() { return this.sprite.y; }
 
   update(delta) {
     this.sprite.setDepth(this.sprite.y);
+
     switch (this.state) {
 
       case S.TRAILING: {
-        this.orbitAngle += this.orbitSpeed * delta * 0.001;
-        this._moveToward(
-          this.scene.player.x + Math.cos(this.orbitAngle) * this.orbitRadius,
-          this.scene.player.y + Math.sin(this.orbitAngle) * this.orbitRadius,
+        const offsetX = Math.cos(this.orbitAngle) * this.orbitRadius;
+        const offsetY = Math.sin(this.orbitAngle) * this.orbitRadius;
+        this.sprite.setPosition(
+          this.scene.player.x + offsetX,
+          this.scene.player.y + offsetY,
         );
         this.trailCheckTimer -= delta;
         if (this.trailCheckTimer <= 0) { this.trailCheckTimer = TRAIL_CHECK_MS; this._tryGoFarm(); }
@@ -52,11 +52,10 @@ export default class Ant {
       }
 
       case S.MOVING_TO_FIELD:
-        this._moveToward(this.targetField.x, this.targetField.y);
+        this._moveToward(this.targetField.x, this.targetField.y, delta);
         if (this._distTo(this.targetField.x, this.targetField.y) < FIELD_ARRIVE_DIST) {
           this.targetField.startFarming();
           this.state = S.FARMING; this.stateTimer = this.farmMs;
-          this.sprite.body.setVelocity(0, 0);
         }
         break;
 
@@ -67,11 +66,10 @@ export default class Ant {
         break;
 
       case S.MOVING_HOME:
-        this._moveToward(this.scene.player.x, this.scene.player.y);
+        this._moveToward(this.scene.player.x, this.scene.player.y, delta);
         if (this._distTo(this.scene.player.x, this.scene.player.y) < HOME_ARRIVE_DIST) {
           this.scene.addHoney(this.beeType.honey, this.scene.player.x, this.scene.player.y);
           this.state = S.DEPOSITING; this.stateTimer = DEPOSIT_MS;
-          this.sprite.body.setVelocity(0, 0);
         }
         break;
 
@@ -95,22 +93,11 @@ export default class Ant {
     this.state       = S.MOVING_TO_FIELD;
   }
 
-  _moveToward(tx, ty) {
+  _moveToward(tx, ty, delta) {
     const angle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, tx, ty);
-    let vx = Math.cos(angle) * this.speed;
-    let vy = Math.sin(angle) * this.speed;
-    for (const ant of this.scene.ants) {
-      if (ant === this) continue;
-      const dx = this.sprite.x - ant.sprite.x;
-      const dy = this.sprite.y - ant.sprite.y;
-      const d  = Math.hypot(dx, dy);
-      if (d > 0.1 && d < SEP_RADIUS) {
-        const s = (SEP_RADIUS - d) / SEP_RADIUS;
-        vx += (dx / d) * s * SEP_FORCE;
-        vy += (dy / d) * s * SEP_FORCE;
-      }
-    }
-    this.sprite.body.setVelocity(vx, vy);
+    const dist  = Math.min(this.speed * delta * 0.001, this._distTo(tx, ty));
+    this.sprite.x += Math.cos(angle) * dist;
+    this.sprite.y += Math.sin(angle) * dist;
   }
 
   _distTo(x, y) { return Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, x, y); }

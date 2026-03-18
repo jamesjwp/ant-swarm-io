@@ -7,13 +7,13 @@ export default class Player {
     this.scene = scene;
     this._currentAnim = null;
 
-    this.sprite = scene.physics.add.sprite(x, y, 'bee-walk', 0);
+    this.sprite = scene.physics.add.sprite(x, y, 'player-walk-south-0');
     this.sprite.setScale(2);
     this.sprite.setCollideWorldBounds(true);
     this.sprite.body.setMaxVelocity(MAX_SPEED, MAX_SPEED);
     this.sprite.body.setDrag(DRAG, DRAG);
-    this.sprite.play('idle-south');
-    this._currentAnim = 'idle-south';
+    this.sprite.play('player-idle-south');
+    this._currentAnim = 'player-idle-south';
 
     this.keys = scene.input.keyboard.addKeys({
       up: Phaser.Input.Keyboard.KeyCodes.W, down:  Phaser.Input.Keyboard.KeyCodes.S,
@@ -36,25 +36,21 @@ export default class Player {
 
   _updateAnimation() {
     const { x: vx, y: vy } = this.sprite.body.velocity;
-    if (Math.hypot(vx, vy) < 20) { this._playAnim('idle-south'); return; }
-    const dir = this._octant(Math.atan2(vy, vx));
-    this._playAnim(`walk-${dir}`);
+    if (Math.hypot(vx, vy) < 20) { this._playAnim('player-idle-south'); return; }
+    const dir = this._cardinal(Math.atan2(vy, vx));
+    this._playAnim(`player-walk-${dir}`);
   }
 
   _playAnim(key) {
     if (this._currentAnim !== key) { this.sprite.play(key); this._currentAnim = key; }
   }
 
-  _octant(angle) {
+  _cardinal(angle) {
     const deg = ((angle * 180 / Math.PI) + 360) % 360;
-    if (deg < 22.5 || deg >= 337.5) return 'east';
-    if (deg < 67.5)  return 'south-east';
-    if (deg < 112.5) return 'south';
-    if (deg < 157.5) return 'south-west';
-    if (deg < 202.5) return 'west';
-    if (deg < 247.5) return 'north-west';
-    if (deg < 292.5) return 'north';
-    return 'north-east';
+    if (deg < 45 || deg >= 315) return 'east';
+    if (deg < 135) return 'south';
+    if (deg < 225) return 'west';
+    return 'north';
   }
 
   get x() { return this.sprite.x; }
