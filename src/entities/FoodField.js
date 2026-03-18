@@ -182,7 +182,7 @@ export default class FoodField {
     this.scene.tweens.add({
       targets: this.sprite, alpha: 0.22, duration: 400, ease: 'Quad.Out',
     });
-    const regenMs = REGEN_MS * (this.scene.fieldRegenMult ?? 1);
+    const regenMs = REGEN_MS * (this.scene.fieldRegenMult ?? 1) * (this.scene.weatherRegenMult ?? 1);
     this.scene.time.delayedCall(regenMs, () => {
       this.isDepleted = false;
       this.assignedAnt = null;

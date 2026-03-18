@@ -59,6 +59,7 @@ export default class Ant {
       case S.MOVING_TO_FIELD:
         this._moveToward(this.targetField.x, this.targetField.y, delta);
         if (this._distTo(this.targetField.x, this.targetField.y) < FIELD_ARRIVE_DIST) {
+          this.sprite.setPosition(this.targetField.x, this.targetField.y);
           if (this.beeType.ability === 'marker') this.targetField.mark();
           this.targetField.startFarming(this.beeType.bodyColor);
           this.state = S.FARMING; this.stateTimer = this.farmMs;

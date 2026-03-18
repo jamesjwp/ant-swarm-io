@@ -4,7 +4,7 @@
     {
       "name": "ant-swarm-io",
       "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "cd /Users/james/ant-swarm-io/.claude/worktrees/cranky-satoshi && npm run dev"],
+      "runtimeArgs": ["-c", "cd /Users/james/ant-swarm-io/.claude/worktrees/gifted-satoshi && npm run dev"],
       "port": 5173
     }
   ]
