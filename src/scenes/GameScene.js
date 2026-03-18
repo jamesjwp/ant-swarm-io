@@ -20,7 +20,12 @@ export default class GameScene extends Phaser.Scene {
   constructor() { super({ key: 'GameScene' }); }
 
   preload() {
-    this.load.spritesheet('bee-walk', 'assets/bee-walk.png', { frameWidth: 84, frameHeight: 84 });
+    this.load.image('bee-south', 'assets/bee/rotations/south.png');
+    for (const dir of ['north', 'south', 'east', 'west'])
+      for (let i = 0; i < 6; i++)
+        this.load.image(`player-walk-${dir}-${i}`, `assets/player/animations/walk/${dir}/frame_00${i}.png`);
+    for (let i = 0; i < 4; i++)
+      this.load.image(`player-idle-${i}`, `assets/player/animations/breathing-idle/south/frame_00${i}.png`);
     this.load.image('grass-bg',       'assets/tiles/grass-bg.png');
     this.load.image('flower-tiles',   'assets/tiles/flower-field.png');
     this.load.image('depleted-tiles', 'assets/tiles/depleted-field.png');
@@ -155,15 +160,10 @@ export default class GameScene extends Phaser.Scene {
   }
 
   _createAnims() {
-    const DIRS = {
-      'south':      [0, 0], 'south-east': [0, 1], 'east':       [0, 2],
-      'north-east': [1, 0], 'north':      [1, 1], 'north-west': [1, 2],
-      'west':       [2, 0], 'south-west': [2, 1],
-    };
-    for (const [dir, [r, c]] of Object.entries(DIRS))
-      this.anims.create({ key: `walk-${dir}`, frames: Array.from({ length: 6 }, (_, n) => ({ key: 'bee-walk', frame: r * 18 + c + n * 3 })), frameRate: 10, repeat: -1 });
-    const [r, c] = DIRS['south'];
-    this.anims.create({ key: 'idle-south', frames: Array.from({ length: 6 }, (_, n) => ({ key: 'bee-walk', frame: r * 18 + c + n * 3 })), frameRate: 6, repeat: -1 });
+    // Player animations (individual frames)
+    for (const dir of ['north', 'south', 'east', 'west'])
+      this.anims.create({ key: `player-walk-${dir}`, frames: Array.from({ length: 6 }, (_, n) => ({ key: `player-walk-${dir}-${n}` })), frameRate: 10, repeat: -1 });
+    this.anims.create({ key: 'player-idle-south', frames: Array.from({ length: 4 }, (_, n) => ({ key: `player-idle-${n}` })), frameRate: 6, repeat: -1 });
   }
 
   _generateTextures() {
