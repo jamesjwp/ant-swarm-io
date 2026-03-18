@@ -2,12 +2,32 @@ import Phaser    from 'phaser';
 import Player    from '../entities/Player';
 import Ant       from '../entities/Ant';
 import FoodField from '../entities/FoodField';
-import { BEE_TYPES } from '../data/BeeTypes.js';
+import HomeTile  from '../entities/HomeTile';
+import Shop       from '../entities/Shop';
+import { BEE_TYPES, getRandomBeeType } from '../data/BeeTypes.js';
+import { SHOP_ITEMS } from '../data/ShopItems.js';
 
-const WORLD_W        = 3200;
-const WORLD_H        = 3200;
-const VILLAGE_H      = 400;
-const PATH_W         = 120;
+const WORLD_W   = 3200;
+const WORLD_H   = 3200;
+const VILLAGE_H = 400;
+const PATH_W    = 120;
+
+const BONUS_INTERVAL_MS = 45_000;
+const BONUS_DURATION_MS = 60_000;
+const BONUS_MULT        = 3;
+
+const QUESTS = [
+  { id: 'honey_50',   desc: 'Collect 50 honey',   icon: '🍯', check: gs => gs.totalHoney >= 50,        reward: 5  },
+  { id: 'honey_200',  desc: 'Collect 200 honey',  icon: '🍯', check: gs => gs.totalHoney >= 200,       reward: 15 },
+  { id: 'honey_500',  desc: 'Collect 500 honey',  icon: '🍯', check: gs => gs.totalHoney >= 500,       reward: 40 },
+  { id: 'level_3',    desc: 'Reach level 3',       icon: '⭐', check: gs => gs.level >= 3,              reward: 10 },
+  { id: 'level_5',    desc: 'Reach level 5',       icon: '⭐', check: gs => gs.level >= 5,              reward: 25 },
+  { id: 'level_10',   desc: 'Reach level 10',      icon: '⭐', check: gs => gs.level >= 10,             reward: 60 },
+  { id: 'bees_5',     desc: 'Own 5 bees',          icon: '🐝', check: gs => gs.ownedBees.length >= 5,  reward: 10 },
+  { id: 'bees_10',    desc: 'Own 10 bees',         icon: '🐝', check: gs => gs.ownedBees.length >= 10, reward: 25 },
+  { id: 'cash_100',   desc: 'Earn 100 cash',       icon: '💰', check: gs => gs.totalCash >= 100,       reward: 8  },
+  { id: 'cash_500',   desc: 'Earn 500 cash',       icon: '💰', check: gs => gs.totalCash >= 500,       reward: 20 },
+];
 
 function spawnFloatText(scene, worldX, worldY, text, color = '#ffffff') {
   const t = scene.add.text(worldX, worldY, text, {
@@ -21,7 +41,7 @@ export default class GameScene extends Phaser.Scene {
 
   preload() {
     this.load.image('bee-south', 'assets/bee/rotations/south.png');
-    for (const dir of ['north', 'south', 'east', 'west'])
+    for (const dir of ['north', 'south', 'east', 'west', 'north-east', 'south-east', 'south-west', 'north-west'])
       for (let i = 0; i < 6; i++)
         this.load.image(`player-walk-${dir}-${i}`, `assets/player/animations/walk/${dir}/frame_00${i}.png`);
     for (let i = 0; i < 4; i++)
@@ -37,18 +57,40 @@ export default class GameScene extends Phaser.Scene {
     this._createAnims();
     this._createGround();
 
-    this.food            = 0;
-    this.nextAntCost     = 1;
+    this.storage         = 0;
+    this.storageMax      = 10;
+    this.cash            = 0;
+    this.tickets         = 0;
+    this.totalHoney      = 0;
+    this.totalCash       = 0;
+    this._storageFullTimer = 0;
+    this.upgrades        = Object.fromEntries(SHOP_ITEMS.map(i => [i.id, 0]));
+    this.nextAntCost     = 5;
     this.maxHiveCells    = 40;
     this.currentZone     = null;
     this.xp              = 0;
+    this.xpMax           = 10;
     this.level           = 1;
     this.statPoints      = 0;
     this.ownedBees       = [];
     this.ants            = [];
 
-    this.player = new Player(this, WORLD_W / 2, WORLD_H - VILLAGE_H / 2);
+    // Upgrade multipliers (applied to new bees and on purchase)
+    this.beeSpeedMult   = 1.0;
+    this.farmTimeMult   = 1.0;
+    this.fieldRegenMult = 1.0;
+    this.cashOutMult    = 1.0;
+
+    // Quests
+    this.quests = QUESTS.map(q => ({ ...q, done: false }));
+
+    this.player   = new Player(this, WORLD_W / 2, WORLD_H - VILLAGE_H / 2);
+    this.homeTile = new HomeTile(this, WORLD_W / 2 - 160, WORLD_H - VILLAGE_H + 100);
+    this.shop     = new Shop(this,    WORLD_W / 2 + 160,  WORLD_H - VILLAGE_H + 100);
     this._createZone();
+
+    this.eKey   = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+    this.escKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
 
     const workerEntry = this._addToInventory(BEE_TYPES.worker);
     this._addToInventory(BEE_TYPES.scout);
@@ -58,36 +100,67 @@ export default class GameScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
     this.cameras.main.startFollow(this.player.sprite, true, 1, 1);
     this.scene.launch('UIScene');
+
+    this._startBonusSpawner();
   }
 
   update(_time, delta) {
     this.player.update();
     this._updateZone();
     for (const ant of this.ants) ant.update(delta);
+
+    const nearHome = this.homeTile.update(this.player.x, this.player.y);
+    const nearShop = this.shop.update(this.player.x, this.player.y);
+    if (Phaser.Input.Keyboard.JustDown(this.eKey)) {
+      if (nearShop)      this._toggleShop();
+      else if (nearHome) this._cashOut();
+    }
+    if (this._storageFullTimer > 0) this._storageFullTimer -= delta;
+
+    this._checkQuests();
     this.scene.get('UIScene')?.refresh(this);
   }
 
-  // Public API
+  // ── Public API ────────────────────────────────────────────────────────────
 
-  addHoney(amount, worldX, worldY) {
-    this.food += amount;
-    spawnFloatText(this, worldX, worldY, `+${amount} 🍯`, '#ffdd44');
-    this._addXp(amount, worldX, worldY - 18);
+  addHoney(amount, xpMult = 1.0, worldX, worldY) {
+    const added = Math.min(amount, this.storageMax - this.storage);
+    if (added <= 0) {
+      if (this._storageFullTimer <= 0) {
+        spawnFloatText(this, this.player.x, this.player.y - 20, 'Honey storage is full!', '#ff4444');
+        this._storageFullTimer = 5000;
+      }
+      return;
+    }
+    this.storage    += added;
+    this.totalHoney += added;
+    spawnFloatText(this, worldX, worldY, `+${added} 🍯`, '#ffdd44');
+    this._addXp(Math.round(added * xpMult), worldX, worldY - 18);
   }
 
   tryBuyAnt() {
-    if (this.food < this.nextAntCost) return false;
-    this.food -= this.nextAntCost;
-    this.nextAntCost *= 2;
-    const entry = this._addToInventory(BEE_TYPES.worker);
+    if (this.cash < this.nextAntCost) return false;
+    this.cash -= this.nextAntCost;
+    this.nextAntCost = Math.ceil((this.nextAntCost + 5) * 1.4);
+    const type  = getRandomBeeType();
+    const entry = this._addToInventory(type);
     if (this.ownedBees.filter(b => b.ant).length < this.maxHiveCells) this.equipBee(entry);
+    spawnFloatText(this, this.player.x, this.player.y - 40, `${type.name}!`, type.nameColor);
     return true;
   }
 
   equipBee(entry) {
     if (entry.ant) return;
-    entry.ant = new Ant(this, this.player.x + Phaser.Math.Between(-40, 40), this.player.y + Phaser.Math.Between(-40, 40), entry.type);
-    this.ants.push(entry.ant);
+    const ant = new Ant(
+      this,
+      this.player.x + Phaser.Math.Between(-40, 40),
+      this.player.y + Phaser.Math.Between(-40, 40),
+      entry.type,
+    );
+    ant.speed  = Math.round(ant.speed  * this.beeSpeedMult);
+    ant.farmMs = Math.round(ant.farmMs * this.farmTimeMult);
+    entry.ant  = ant;
+    this.ants.push(ant);
   }
 
   unequipBee(entry) {
@@ -98,18 +171,67 @@ export default class GameScene extends Phaser.Scene {
     entry.ant = null;
   }
 
-  get antCount()   { return this.ants.length; }
-  xpForNextLevel() { return this.level * 10; }
+  get antCount()      { return this.ants.length; }
+  get isStorageFull() { return this.storage >= this.storageMax; }
+  xpForNextLevel()    { return this.xpMax; }
+
+  spawnXpOrb(fromX, fromY) {
+    const orb = this.add.circle(fromX, fromY - 20, 5, 0x88ffdd, 1).setDepth(9999);
+    this.tweens.add({
+      targets: orb, x: this.player.x, y: this.player.y - 10,
+      scale: 0, duration: 700, ease: 'Quad.In',
+      onComplete: () => { orb.destroy(); this._addXp(3, this.player.x, this.player.y - 20); },
+    });
+  }
 
   getAvailableField() {
     if (!this.currentZone) return null;
+    if (this.isStorageFull) return null;
     const avail = this.zone.fields.filter(f => f.isAvailable);
     if (!avail.length) return null;
     const { x: px, y: py } = this.player;
     return avail.sort((a, b) => Math.hypot(a.x - px, a.y - py) - Math.hypot(b.x - px, b.y - py))[0];
   }
 
-  // Private
+  // ── Private ───────────────────────────────────────────────────────────────
+
+  buyUpgrade(id) {
+    const item  = SHOP_ITEMS.find(i => i.id === id);
+    if (!item) return false;
+    const level = this.upgrades[id] ?? 0;
+    const cost  = item.getCost(level);
+    if (this.cash < cost) return false;
+    this.cash -= cost;
+    this.upgrades[id]++;
+    item.onBuy(this);
+    spawnFloatText(this, this.player.x, this.player.y - 40, `${item.icon} ${item.name}!`, '#ffdd44');
+    return true;
+  }
+
+  _toggleShop() {
+    if (this.scene.isSleeping('ShopScene')) {
+      this.scene.wake('ShopScene');
+    } else if (!this.scene.isActive('ShopScene')) {
+      this.scene.launch('ShopScene');
+    } else {
+      this._closeShop();
+    }
+  }
+
+  _closeShop() {
+    if (this.scene.isActive('ShopScene') && !this.scene.isSleeping('ShopScene')) {
+      this.scene.sleep('ShopScene');
+    }
+  }
+
+  _cashOut() {
+    if (this.storage <= 0) return;
+    const amount = Math.floor(this.storage * this.cashOutMult);
+    this.cash      += amount;
+    this.totalCash += amount;
+    this.storage    = 0;
+    spawnFloatText(this, this.homeTile.x, this.homeTile.y - 20, `+${amount} 💰`, '#ffff44');
+  }
 
   _addToInventory(type) {
     const entry = { type, ant: null };
@@ -120,8 +242,9 @@ export default class GameScene extends Phaser.Scene {
   _addXp(amount, worldX, worldY) {
     this.xp += amount;
     spawnFloatText(this, worldX, worldY, `+${amount} xp`, '#88ddff');
-    if (this.xp >= this.xpForNextLevel()) {
-      this.xp -= this.xpForNextLevel();
+    if (this.xp >= this.xpMax) {
+      this.xp -= this.xpMax;
+      this.xpMax = Math.ceil((this.xpMax + 100) * 1.1);
       this.level++;
       this.statPoints++;
       this._onLevelUp();
@@ -138,6 +261,32 @@ export default class GameScene extends Phaser.Scene {
 
   _updateZone() {
     this.currentZone = this.zone.bounds.contains(this.player.x, this.player.y) ? this.zone : null;
+  }
+
+  _startBonusSpawner() {
+    this.time.addEvent({
+      delay: BONUS_INTERVAL_MS, loop: true, callback: () => {
+        const avail = this.zone.fields.filter(f => !f.isDepleted && !f.isBoosted);
+        if (!avail.length) return;
+        const field = avail[Math.floor(Math.random() * avail.length)];
+        field.applyBonus(BONUS_MULT, BONUS_DURATION_MS);
+      },
+    });
+  }
+
+  _checkQuests() {
+    for (const q of this.quests) {
+      if (q.done) continue;
+      if (q.check(this)) {
+        q.done = true;
+        this.tickets += q.reward;
+        const py = this.player.y - 60;
+        const t  = this.add.text(this.player.x, py, `${q.icon} Quest done! +${q.reward} 🎫`, {
+          fontSize: '16px', color: '#ffff88', stroke: '#000000', strokeThickness: 4, fontStyle: 'bold',
+        }).setOrigin(0.5, 1).setDepth(9999);
+        this.tweens.add({ targets: t, y: py - 60, alpha: 0, duration: 2500, ease: 'Quad.Out', onComplete: () => t.destroy() });
+      }
+    }
   }
 
   _createZone() {
@@ -160,8 +309,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   _createAnims() {
-    // Player animations (individual frames)
-    for (const dir of ['north', 'south', 'east', 'west'])
+    for (const dir of ['north', 'south', 'east', 'west', 'north-east', 'south-east', 'south-west', 'north-west'])
       this.anims.create({ key: `player-walk-${dir}`, frames: Array.from({ length: 6 }, (_, n) => ({ key: `player-walk-${dir}-${n}` })), frameRate: 10, repeat: -1 });
     this.anims.create({ key: 'player-idle-south', frames: Array.from({ length: 4 }, (_, n) => ({ key: `player-idle-${n}` })), frameRate: 6, repeat: -1 });
   }

@@ -123,6 +123,11 @@ export default class HiveScene extends Phaser.Scene {
     }).setOrigin(0.5, 1);
     this._eqWin.add(this._eqInfo);
 
+    this._beeCounter = this.add.text(W - 14, 24, '', {
+      fontSize: '12px', color: '#c8a030', stroke: '#000', strokeThickness: 2,
+    }).setOrigin(1, 0.5);
+    this._eqWin.add(this._beeCounter);
+
     this._eqSlotsCont = this.add.container(0, 0);
     this._eqWin.add(this._eqSlotsCont);
 
@@ -173,6 +178,7 @@ export default class HiveScene extends Phaser.Scene {
 
     const dep = equipped.length;
     this._eqInfo.setText(`${dep}  /  ${gs.maxHiveCells}  E Q U I P P E D`);
+    this._beeCounter.setText(`🐝 ${dep} / ${gs.maxHiveCells}`);
   }
 
   // ── Inventory Window ────────────────────────────────────────────────────
