@@ -1,31 +1,52 @@
 import Phaser from 'phaser';
 
-const S = { fontSize:'22px', color:'#ffffff', stroke:'#000000', strokeThickness:4 };
+const LABEL_STYLE = { fontSize: '13px', color: '#cccccc', stroke: '#000000', strokeThickness: 3 };
+const VAL_STYLE   = { fontSize: '12px', color: '#ffffff', stroke: '#000000', strokeThickness: 3 };
+
+const BAR_W = 130;
+const BAR_H = 12;
+const LBL_W = 62;
+const ROW_H = 28;
+const LEFT  = 14;
+
+function makeBar(scene, x, y, bgColor, fillColor) {
+  const bg   = scene.add.rectangle(x, y, BAR_W, BAR_H, bgColor, 0.85).setOrigin(0, 0.5);
+  const fill = scene.add.rectangle(x, y, 0,     BAR_H, fillColor, 1).setOrigin(0, 0.5);
+  return { bg, fill };
+}
 
 export default class UIScene extends Phaser.Scene {
   constructor() { super({ key: 'UIScene' }); }
 
   create() {
-    this.foodText  = this.add.text(16, 16, 'Honey: 0',  S);
-    this.antText   = this.add.text(16, 48, 'Bees: 0/0', S);
-    this.levelText = this.add.text(16, 80, 'Lv. 1',     S);
+    const BX = LEFT + LBL_W;   // bar x
 
-    this.xpBarBg = this.add.rectangle(16, 114, 140, 12, 0x333333, 0.9).setOrigin(0, 0.5);
-    this.xpBar   = this.add.rectangle(16, 114,   0, 12, 0x44aaff, 1.0).setOrigin(0, 0.5);
-    this.xpText  = this.add.text(16, 122, '0/10 XP', { fontSize:'12px', color:'#88ddff', stroke:'#000', strokeThickness:3 });
+    // Row 0 — Honey
+    this.honeyLabel = this.add.text(LEFT, LEFT + ROW_H * 0, '🍯 Honey', LABEL_STYLE).setOrigin(0, 0.5);
+    this.honeyBar   = makeBar(this, BX, LEFT + ROW_H * 0, 0x3a2a00, 0xf5c800);
+    this.honeyVal   = this.add.text(BX + BAR_W + 6, LEFT + ROW_H * 0, '0/10', VAL_STYLE).setOrigin(0, 0.5);
 
-    this.statText = this.add.text(16, 140, '', {
-      fontSize:'14px', color:'#ffff55', stroke:'#000', strokeThickness:3, fontStyle:'bold',
-    }).setVisible(false);
+    // Row 1 — Cash
+    this.cashLabel  = this.add.text(LEFT, LEFT + ROW_H * 1, '💰 Cash', LABEL_STYLE).setOrigin(0, 0.5);
+    this.cashBar    = makeBar(this, BX, LEFT + ROW_H * 1, 0x0a2a0a, 0x44cc44);
+    this.cashVal    = this.add.text(BX + BAR_W + 6, LEFT + ROW_H * 1, '0', VAL_STYLE).setOrigin(0, 0.5);
 
-    this.buyBtn = this.add.text(16, 660, '[ Recruit Bee — 1 🍯 ]', {
-      ...S, fontSize:'20px', color:'#ffdd44', backgroundColor:'#00000099', padding:{ x:12, y:6 },
-    }).setInteractive({ useHandCursor: true });
-    this.buyBtn.on('pointerdown', () => this.scene.get('GameScene').tryBuyAnt());
-    this.buyBtn.on('pointerover', () => this.buyBtn.setAlpha(0.75));
-    this.buyBtn.on('pointerout',  () => this.buyBtn.setAlpha(1));
+    // Row 2 — Tickets (static, no bar needed — shown only when > 0)
+    this.ticketText = this.add.text(BX + BAR_W + 6, LEFT + ROW_H * 1 + 14, '', {
+      fontSize: '11px', color: '#ffff88', stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0, 0.5);
 
-    const btnStyle = { fontSize:'18px', color:'#ffdd44', stroke:'#000000', strokeThickness:4, backgroundColor:'#00000099', padding:{ x:10, y:5 } };
+    // Row 2 — XP
+    this.levelText  = this.add.text(LEFT, LEFT + ROW_H * 2, 'Lv. 1', LABEL_STYLE).setOrigin(0, 0.5);
+    this.xpBar      = makeBar(this, BX, LEFT + ROW_H * 2, 0x0a1a3a, 0x44aaff);
+    this.xpVal      = this.add.text(BX + BAR_W + 6, LEFT + ROW_H * 2, '0/10 XP', VAL_STYLE).setOrigin(0, 0.5);
+
+    // Stat points (conditional)
+    this.statText   = this.add.text(LEFT, LEFT + ROW_H * 3, '', {
+      fontSize: '13px', color: '#ffff55', stroke: '#000', strokeThickness: 3, fontStyle: 'bold',
+    }).setOrigin(0, 0.5).setVisible(false);
+
+    const btnStyle = { fontSize: '18px', color: '#ffdd44', stroke: '#000000', strokeThickness: 4, backgroundColor: '#00000099', padding: { x: 10, y: 5 } };
 
     this._eqOpen  = false;
     this._invOpen = false;
@@ -42,28 +63,39 @@ export default class UIScene extends Phaser.Scene {
     this.invBtn.on('pointerover', () => this.invBtn.setAlpha(0.75));
     this.invBtn.on('pointerout',  () => this.invBtn.setAlpha(1));
 
-    const hint = this.add.text(640, 700, 'WASD to move  ·  bees collect honey automatically', {
-      fontSize:'14px', color:'#cccccc', stroke:'#000000', strokeThickness:3,
+    const hint = this.add.text(640, 700, 'WASD to move  ·  bees collect honey  ·  return home & press E to cash out  ·  visit the shop to buy upgrades', {
+      fontSize: '13px', color: '#cccccc', stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 1);
     this.time.delayedCall(5000, () => this.tweens.add({ targets: hint, alpha: 0, duration: 1500 }));
   }
 
   refresh(gs) {
-    this.foodText.setText(`Honey: ${gs.food}`);
-    this.antText.setText(`Bees: ${gs.antCount}/${gs.ownedBees.length}`);
-    this.levelText.setText(`Lv. ${gs.level}`);
+    // Honey bar
+    const hPct = gs.storageMax > 0 ? Math.min(gs.storage / gs.storageMax, 1) : 0;
+    this.honeyBar.fill.setSize(Math.round(BAR_W * hPct), BAR_H);
+    this.honeyVal.setText(`${gs.storage}/${gs.storageMax}`);
 
+    // Cash bar — fills toward next bee cost
+    const cPct = gs.nextAntCost > 0 ? Math.min(gs.cash / gs.nextAntCost, 1) : 1;
+    this.cashBar.fill.setSize(Math.round(BAR_W * cPct), BAR_H);
+    this.cashVal.setText(`${gs.cash} 💰`);
+
+    // XP bar
     const xpNeeded = gs.xpForNextLevel();
-    this.xpBar.setSize(Math.round(140 * Math.min(gs.xp / xpNeeded, 1)), 12);
-    this.xpText.setText(`${gs.xp}/${xpNeeded} XP`);
+    const xPct     = xpNeeded > 0 ? Math.min(gs.xp / xpNeeded, 1) : 0;
+    this.xpBar.fill.setSize(Math.round(BAR_W * xPct), BAR_H);
+    this.xpVal.setText(`${gs.xp}/${xpNeeded} XP`);
+    this.levelText.setText(`Lv. ${gs.level}`);
 
     this.statText.setText(`⭐ ${gs.statPoints} stat point${gs.statPoints > 1 ? 's' : ''} available!`);
     this.statText.setVisible(gs.statPoints > 0);
 
-    const canAfford = gs.food >= gs.nextAntCost;
-    this.buyBtn.setText(`[ Recruit Bee — ${gs.nextAntCost} 🍯 ]`);
-    this.buyBtn.setAlpha(canAfford ? 1 : 0.4);
-    this.buyBtn.setInteractive(canAfford);
+    // Tickets (shown only when > 0)
+    if (gs.tickets > 0) {
+      this.ticketText.setText(`🎫 ${gs.tickets} ticket${gs.tickets !== 1 ? 's' : ''}`).setVisible(true);
+    } else {
+      this.ticketText.setVisible(false);
+    }
   }
 
   _toggleEquip() {
@@ -87,9 +119,9 @@ export default class UIScene extends Phaser.Scene {
     const anyOpen = this._eqOpen || this._invOpen;
     if (anyOpen) {
       if (this.scene.isSleeping('HiveScene')) {
-        this.scene.wake('HiveScene'); // wake event calls _applyToHive
+        this.scene.wake('HiveScene');
       } else if (!this.scene.isActive('HiveScene')) {
-        this.scene.launch('HiveScene'); // create() calls _applyToHive at end
+        this.scene.launch('HiveScene');
       } else {
         this._applyToHive();
       }

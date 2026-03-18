@@ -2,6 +2,9 @@ const MAX_SPEED = 300;
 const ACCEL     = 2400;
 const DRAG      = 1600;
 
+const DIR8_CARD = { 0: 'east', 2: 'south', 4: 'west', 6: 'north' };
+const DIR8_DIAG = { 1: 'south-east', 3: 'south-west', 5: 'north-west', 7: 'north-east' };
+
 export default class Player {
   constructor(scene, x, y) {
     this.scene = scene;
@@ -30,27 +33,28 @@ export default class Player {
     if (down.isDown)  ay += ACCEL;
     if (ax !== 0 && ay !== 0) { ax *= 0.707; ay *= 0.707; }
     this.sprite.body.setAcceleration(ax, ay);
+
     this.sprite.setDepth(this.sprite.y);
     this._updateAnimation();
   }
 
   _updateAnimation() {
     const { x: vx, y: vy } = this.sprite.body.velocity;
-    if (Math.hypot(vx, vy) < 20) { this._playAnim('player-idle-south'); return; }
-    const dir = this._cardinal(Math.atan2(vy, vx));
-    this._playAnim(`player-walk-${dir}`);
+    const speed = Math.hypot(vx, vy);
+
+    if (speed < 20) {
+      this._play('player-idle-south');
+      return;
+    }
+
+    const deg  = ((Math.atan2(vy, vx) * 180 / Math.PI) + 360) % 360;
+    const dir8 = Math.round(deg / 45) % 8;
+    const dir  = DIR8_DIAG[dir8] ?? DIR8_CARD[dir8];
+    this._play(`player-walk-${dir}`);
   }
 
-  _playAnim(key) {
+  _play(key) {
     if (this._currentAnim !== key) { this.sprite.play(key); this._currentAnim = key; }
-  }
-
-  _cardinal(angle) {
-    const deg = ((angle * 180 / Math.PI) + 360) % 360;
-    if (deg < 45 || deg >= 315) return 'east';
-    if (deg < 135) return 'south';
-    if (deg < 225) return 'west';
-    return 'north';
   }
 
   get x() { return this.sprite.x; }

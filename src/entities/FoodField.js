@@ -1,4 +1,5 @@
-const REGEN_MS = 12_000;
+const REGEN_MS  = 12_000;
+const MARK_MS   = 20_000;
 
 export default class FoodField {
   constructor(scene, x, y) {
@@ -10,15 +11,26 @@ export default class FoodField {
     this.assignedAnt  = null;
     this.isDepleted   = false;
     this._progressGfx = null;
+    this._beeColor    = 0xf5c800;
+
+    this.isMarked  = false;
+    this._markGfx  = null;
+    this._markTimer = null;
+
+    this.isBoosted  = false;
+    this.bonusMult  = 1;
+    this._bonusGfx  = null;
+    this._bonusTimer = null;
   }
 
   get x() { return this._x; }
   get y() { return this._y; }
   get isAvailable() { return !this.isDepleted && this.assignedAnt === null; }
 
-  claim(ant)       { this.assignedAnt = ant; }
+  claim(ant) { this.assignedAnt = ant; }
 
-  startFarming() {
+  startFarming(beeColor = 0xf5c800) {
+    this._beeColor = beeColor;
     if (!this._progressGfx) this._progressGfx = this.scene.add.graphics().setDepth(2);
     this.setProgress(0);
   }
@@ -29,11 +41,13 @@ export default class FoodField {
     gfx.clear();
     if (pct <= 0) return;
     const H = Math.max(2, Math.round(28 * pct));
-    gfx.fillStyle(0xf5c800, 0.9);
+    gfx.fillStyle(this._beeColor, 0.9);
     gfx.fillRoundedRect(this._x - 14, this._y + 14 - H, 28, H, Math.min(4, H / 2));
   }
 
   finishFarming() {
+    this.unmark();
+    this.clearBonus();
     this.assignedAnt = null;
     if (this._progressGfx) this._progressGfx.clear();
     this._deplete();
@@ -44,14 +58,77 @@ export default class FoodField {
     if (this._progressGfx) this._progressGfx.clear();
   }
 
+  mark() {
+    this.isMarked = true;
+    if (!this._markGfx) this._markGfx = this.scene.add.graphics().setDepth(3);
+    this._drawMark();
+    if (this._markTimer) this._markTimer.remove();
+    this._markTimer = this.scene.time.delayedCall(MARK_MS, () => this.unmark());
+  }
+
+  unmark() {
+    if (!this.isMarked) return;
+    this.isMarked = false;
+    if (this._markGfx) { this._markGfx.clear(); }
+    if (this._markTimer) { this._markTimer.remove(); this._markTimer = null; }
+  }
+
+  applyBonus(mult, durationMs) {
+    this.isBoosted = true;
+    this.bonusMult = mult;
+    if (!this._bonusGfx) this._bonusGfx = this.scene.add.graphics().setDepth(3);
+    this._drawBonus();
+    if (this._bonusTimer) this._bonusTimer.remove();
+    this._bonusTimer = this.scene.time.delayedCall(durationMs, () => this.clearBonus());
+  }
+
+  clearBonus() {
+    this.isBoosted = false;
+    this.bonusMult = 1;
+    if (this._bonusGfx) { this._bonusGfx.clear(); }
+    if (this._bonusTimer) { this._bonusTimer.remove(); this._bonusTimer = null; }
+  }
+
+  _drawBonus() {
+    const g = this._bonusGfx;
+    if (!g) return;
+    g.clear();
+    // Golden star-like burst: 4 filled diamond shapes rotated
+    g.fillStyle(0xffd700, 0.85);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      const px = this._x + Math.cos(a) * 12;
+      const py = this._y + Math.sin(a) * 12;
+      g.fillCircle(px, py, 3);
+    }
+    g.fillStyle(0xffd700, 1);
+    g.fillCircle(this._x, this._y, 4);
+    g.fillStyle(0xffffff, 0.9);
+    g.fillCircle(this._x, this._y, 2);
+  }
+
+  _drawMark() {
+    const g = this._markGfx;
+    if (!g) return;
+    g.clear();
+    g.lineStyle(2, 0xffd700, 0.9);
+    g.strokeCircle(this._x, this._y, 14);
+    g.lineStyle(1, 0xffd700, 0.4);
+    g.strokeCircle(this._x, this._y, 18);
+  }
+
   _deplete() {
     this.isDepleted = true;
-    this.sprite.setTexture('depleted-tiles').setScale(1);
-    this.scene.tweens.add({ targets: this.sprite, scaleX: 1.35, scaleY: 1.35, duration: 70, ease: 'Quad.Out', yoyo: true, onComplete: () => this.sprite.setScale(1) });
-    this.scene.time.delayedCall(REGEN_MS, () => {
-      this.isDepleted = false; this.assignedAnt = null;
-      this.sprite.setTexture('flower-tiles').setAlpha(0);
-      this.scene.tweens.add({ targets: this.sprite, alpha: 1, duration: 600, ease: 'Sine.In' });
+    this.scene.tweens.add({
+      targets: this.sprite, alpha: 0.22, duration: 400, ease: 'Quad.Out',
+    });
+    const regenMs = REGEN_MS * (this.scene.fieldRegenMult ?? 1);
+    this.scene.time.delayedCall(regenMs, () => {
+      this.isDepleted = false;
+      this.assignedAnt = null;
+      this.scene.tweens.add({
+        targets: this.sprite, alpha: 1, duration: 1200, ease: 'Sine.In',
+      });
     });
   }
 }
