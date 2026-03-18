@@ -54,6 +54,53 @@ constants in `Ladybug.js` to tune difficulty.
 
 ---
 
+## Harvest Streak System
+
+**Q: Should combo multiplier apply at collection or at cash-out?**
+Decision: Applied at collection time — in Ant's FARMING state alongside dayHoneyMult and
+weatherHoneyMult. This makes the float text show the boosted amount, giving better feedback.
+
+**Q: Should cashing out reset the streak?**
+Decision: No — streak only resets on 12s inactivity. Cashing out is already a trade-off
+(empty storage = bees can keep farming). Resetting on cashout would feel punishing.
+
+**Q: Combo scaling rate?**
+Decision: Every 5 honey deliveries = +10% mult, max 3.0× at 100 deliveries.
+Adjust `Math.floor(this.comboCount / 5) * 0.10` in `addHoney()` in GameScene.js.
+
+---
+
+## Weather Events
+
+**Q: Which weather types and what do they do?**
+Decision: 3 types implemented:
+- ☔ Sunshower: spawns 4 extra world tokens immediately, lasts 50s
+- 💨 Gusting Wind: bee move speed ×1.6 (via `weatherSpeedMult` getter), lasts 45s
+- ✨ Golden Hour: all honey gathered ×1.4 (via `weatherHoneyMult` getter), lasts 55s
+
+**Q: How often do weather events occur?**
+Decision: Random 90–180s between events. Adjust `Phaser.Math.Between(90_000, 180_000)`
+in `_startWeatherSystem()` in GameScene.js.
+
+---
+
+## Achievement Badges
+
+**Q: How many badges and what are they?**
+Decision: 12 badges across progression, streak, exploration, and collection milestones.
+Defined in `src/data/Badges.js`. Rewards are tickets + optional storage upgrades.
+
+**Q: Are badges persistent between sessions?**
+Decision: No persistence yet (localStorage not implemented). Badges reset on reload.
+Add `gs.badges = new Set(JSON.parse(localStorage.getItem('badges') ?? '[]'))`
+in GameScene.create() if persistence is needed.
+
+**Q: Where is the badge UI?**
+Decision: "🏅 N/12" button in top-right HUD (below Inv button). Opens a 2-column panel
+listing all badges, earned ones lit up, locked ones grayed out.
+
+---
+
 ## Future Features (not yet implemented)
 
 - **More Bear NPCs**: Mother Bear, Brown Bear (frequent ticket quests), Spirit Bear (late game)
@@ -64,3 +111,6 @@ constants in `Ladybug.js` to tune difficulty.
 - **Mobs with combat**: Spiders/scorpions in higher zones that damage bees
 - **Bear quests**: Add more quest tiers (per-zone honey goals, per-bee-type goals)
 - **Bear NPC animations**: Use PixelLab `animate_character` to add idle/walk animations
+- **Badge persistence**: Store earned badges in localStorage between sessions
+- **More weather types**: Foggy Night (reduced visibility), Bloom Day (fields regen 2×)
+- **Combo visual**: Heat shimmer / fire particle on player sprite at high combo streaks

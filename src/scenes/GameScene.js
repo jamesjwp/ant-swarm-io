@@ -1,11 +1,13 @@
-import Phaser    from 'phaser';
-import Player    from '../entities/Player';
-import Ant       from '../entities/Ant';
-import FoodField from '../entities/FoodField';
-import HomeTile  from '../entities/HomeTile';
+import Phaser     from 'phaser';
+import Player     from '../entities/Player';
+import Ant        from '../entities/Ant';
+import FoodField  from '../entities/FoodField';
+import HomeTile   from '../entities/HomeTile';
 import Shop       from '../entities/Shop';
-import Bear      from '../entities/Bear';
-import Ladybug   from '../entities/Ladybug';
+import Bear       from '../entities/Bear';
+import Ladybug    from '../entities/Ladybug';
+import WorldToken from '../entities/WorldToken';
+import { BADGES }  from '../data/Badges.js';
 import { BEE_TYPES, getRandomBeeType, getEggBeeType, getBondLevel } from '../data/BeeTypes.js';
 import { SHOP_ITEMS } from '../data/ShopItems.js';
 import { FIELD_ZONES, getZoneForY } from '../data/FieldZones.js';
@@ -99,6 +101,31 @@ export default class GameScene extends Phaser.Scene {
     this.starTreats       = 0;
     this.royalJellies     = 0;
 
+    // Day/Night
+    this.dayTime      = 0;
+    this.dayPhase     = 'day';
+    this.dayHoneyMult = 1.0;
+
+    // World tokens
+    this.worldTokens = [];
+    this.playerLuck  = 0;
+
+    // Stat allocation
+    this.statAlloc = { agility: 0, capacity: 0, commerce: 0, fortune: 0 };
+
+    // Harvest streak (combo multiplier)
+    this.comboCount  = 0;
+    this.comboMult   = 1.0;
+    this._comboTimer = 0;
+
+    // Weather events
+    this.weather        = null;
+    this._weatherCount  = 0;
+
+    // Achievement badges
+    this.badges        = new Set();
+    this._visitedZones = new Set();
+
     this.player   = new Player(this, WORLD_W / 2, WORLD_H - VILLAGE_H / 2);
     this.homeTile = new HomeTile(this, WORLD_W / 2 - 160, WORLD_H - VILLAGE_H + 100);
     this.shop     = new Shop(this,    WORLD_W / 2 + 160,  WORLD_H - VILLAGE_H + 100);
@@ -124,8 +151,16 @@ export default class GameScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player.sprite, true, 1, 1);
     this.scene.launch('UIScene');
 
+    // Day/night overlay (full-world tint, depth above fields)
+    this._dayOverlay     = this.add.rectangle(WORLD_W / 2, WORLD_H / 2, WORLD_W, WORLD_H, 0x000033, 0).setDepth(5000);
+    // Weather overlay (sits just below day overlay)
+    this._weatherOverlay = this.add.rectangle(WORLD_W / 2, WORLD_H / 2, WORLD_W, WORLD_H, 0x000000, 0).setDepth(4900);
+
     this._startBonusSpawner();
     this._startLadybugSpawner();
+    this._startTokenSpawner();
+    this._startWeatherSystem();
+    this.time.addEvent({ delay: 3000, loop: true, callback: () => this._checkBadges() });
   }
 
   update(_time, delta) {
@@ -150,6 +185,24 @@ export default class GameScene extends Phaser.Scene {
     for (const bug of this.ladybugs) bug.update(this.player.x, this.player.y, delta);
     if (this._storageFullTimer > 0) this._storageFullTimer -= delta;
 
+    this._updateDayNight(delta);
+
+    // Harvest streak decay
+    if (this._comboTimer > 0) {
+      this._comboTimer -= delta;
+      if (this._comboTimer <= 0) { this.comboCount = 0; this.comboMult = 1.0; }
+    }
+
+    // Weather countdown
+    if (this.weather) {
+      this.weather.timeLeft -= delta;
+      if (this.weather.timeLeft <= 0) this._endWeather();
+    }
+
+    // Update world tokens, remove collected ones
+    this.worldTokens = this.worldTokens.filter(t => !t.collected);
+    for (const tok of this.worldTokens) tok.update(this.player.x, this.player.y);
+
     this._checkQuests();
     this.scene.get('UIScene')?.refresh(this);
   }
@@ -169,6 +222,16 @@ export default class GameScene extends Phaser.Scene {
     this.totalHoney += added;
     spawnFloatText(this, worldX, worldY, `+${added} 🍯`, '#ffdd44');
     this._addXp(Math.round(added * xpMult), worldX, worldY - 18);
+
+    // Harvest streak — each delivery resets the decay timer
+    this.comboCount++;
+    this._comboTimer = 12_000;
+    const newMult = Math.min(3.0, 1.0 + Math.floor(this.comboCount / 5) * 0.10);
+    if (newMult > this.comboMult + 0.005) {
+      this.comboMult = newMult;
+      if (this.comboCount >= 10)
+        spawnFloatText(this, this.player.x, this.player.y - 56, `🔥 ×${newMult.toFixed(1)} Streak!`, '#ff6622');
+    }
   }
 
   tryBuyAnt() {
@@ -346,6 +409,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   _showZoneBanner(zone) {
+    this._visitedZones.add(zone.name);
     const py = this.player.y - 70;
     const t  = this.add.text(this.player.x, py, `${zone.icon}  ${zone.name}  ×${zone.honeyMult} honey`, {
       fontSize: '18px', color: '#ffffff', stroke: '#000000', strokeThickness: 5, fontStyle: 'bold',
@@ -518,5 +582,146 @@ export default class GameScene extends Phaser.Scene {
     g.fillStyle(stripeColor, 0.88); g.fillEllipse(12, 4.5, 8, 2.2); g.fillEllipse(12, 7, 10, 2.2); g.fillEllipse(12, 9.5, 8, 2.2);
     g.lineStyle(1, 0x2a1400, 0.5);  g.strokeCircle(12, 7, 6);
     g.generateTexture(key, 24, 14); g.destroy();
+  }
+
+  // ── Day / Night ───────────────────────────────────────────────────────────
+
+  _updateDayNight(delta) {
+    const CYCLE_MS = 4 * 60 * 1000; // 4-minute full cycle
+    this.dayTime = (this.dayTime + delta / CYCLE_MS) % 1;
+    const t = this.dayTime;
+
+    // Phase boundaries: day 0–0.42, dusk 0.42–0.55, night 0.55–0.78, dawn 0.78–0.93, day again
+    let phase, mult;
+    if      (t < 0.42) { phase = 'day';   mult = 1.0; }
+    else if (t < 0.55) { phase = 'dusk';  mult = 1.1; }
+    else if (t < 0.78) { phase = 'night'; mult = 0.8; }
+    else if (t < 0.93) { phase = 'dawn';  mult = 1.1; }
+    else               { phase = 'day';   mult = 1.0; }
+
+    this.dayPhase     = phase;
+    this.dayHoneyMult = mult;
+
+    // Smooth overlay alpha: 0 at day, peaks at 0.42 during night
+    const nightCenter = 0.665;
+    const raw  = Math.abs(t - nightCenter);
+    const dist = Math.min(raw, 1 - raw);
+    const alpha = Math.max(0, 0.48 * (1 - dist / 0.30));
+    this._dayOverlay.setAlpha(Math.min(alpha, 0.48));
+  }
+
+  // ── World Tokens ──────────────────────────────────────────────────────────
+
+  _startTokenSpawner() {
+    this.time.addEvent({ delay: 18_000, loop: true, callback: () => {
+      if (this.worldTokens.length < 8) this._spawnToken();
+    }});
+  }
+
+  _spawnToken() {
+    const TYPES = ['honey','honey','honey','honey','honey','honey','honey','cash','cash','ticket'];
+    const avail = this.zone.fields.filter(f => !f.isDepleted);
+    if (!avail.length) return;
+    const field = avail[Math.floor(Math.random() * avail.length)];
+    const type  = TYPES[Math.floor(Math.random() * TYPES.length)];
+    this.worldTokens.push(new WorldToken(
+      this,
+      field.x + Phaser.Math.Between(-12, 12),
+      field.y + Phaser.Math.Between(-12, 12),
+      type,
+    ));
+  }
+
+  // ── Weather Events ────────────────────────────────────────────────────────
+
+  get weatherHoneyMult() { return this.weather?.id === 'golden_hour' ? 1.4 : 1.0; }
+  get weatherSpeedMult()  { return this.weather?.id === 'windstorm'   ? 1.6 : 1.0; }
+
+  _startWeatherSystem() {
+    const schedule = () => {
+      this.time.delayedCall(Phaser.Math.Between(90_000, 180_000), () => {
+        this._triggerWeather();
+        schedule();
+      });
+    };
+    schedule();
+  }
+
+  _triggerWeather() {
+    const TYPES = [
+      { id: 'sunshower',   name: '☔ Sunshower',   color: 0x1133aa, alpha: 0.10, timeLeft: 50_000 },
+      { id: 'windstorm',   name: '💨 Gusting Wind', color: 0x113322, alpha: 0.09, timeLeft: 45_000 },
+      { id: 'golden_hour', name: '✨ Golden Hour',  color: 0x553300, alpha: 0.14, timeLeft: 55_000 },
+    ];
+    const type = TYPES[Math.floor(Math.random() * TYPES.length)];
+    this.weather = { ...type };
+    this._weatherCount = (this._weatherCount ?? 0) + 1;
+    this._weatherOverlay.setFillStyle(type.color, type.alpha);
+    if (type.id === 'sunshower') {
+      for (let i = 0; i < 4; i++) this._spawnToken();
+    }
+    this.scene.get('UIScene')?._showWeatherBanner(type.name);
+  }
+
+  _endWeather() {
+    this._weatherOverlay.setAlpha(0);
+    this.weather = null;
+  }
+
+  // ── Achievement Badges ────────────────────────────────────────────────────
+
+  _checkBadges() {
+    for (const b of BADGES) {
+      if (this.badges.has(b.id) || !b.check(this)) continue;
+      this.badges.add(b.id);
+      if (b.reward.tickets) this.tickets    += b.reward.tickets;
+      if (b.reward.storage) this.storageMax += b.reward.storage;
+      this._showBadgeUnlock(b);
+    }
+  }
+
+  _showBadgeUnlock(badge) {
+    const parts = [];
+    if (badge.reward.tickets) parts.push(`+${badge.reward.tickets}🎫`);
+    if (badge.reward.storage) parts.push(`+${badge.reward.storage} storage`);
+    const rewardStr = parts.length ? `  ${parts.join(' ')}` : '';
+    const py = this.player.y - 72;
+    const t  = this.add.text(this.player.x, py, `${badge.icon} Badge: ${badge.name}!${rewardStr}`, {
+      fontSize: '15px', color: '#ffdd44', stroke: '#000000', strokeThickness: 5, fontStyle: 'bold',
+    }).setOrigin(0.5, 1).setDepth(9999).setAlpha(0);
+    this.tweens.add({
+      targets: t, alpha: 1, y: py - 10, duration: 350, ease: 'Quad.Out',
+      onComplete: () => this.tweens.add({
+        targets: t, alpha: 0, y: t.y - 70, duration: 2500, delay: 1500,
+        ease: 'Quad.In', onComplete: () => t.destroy(),
+      }),
+    });
+  }
+
+  // ── Stat Allocation ───────────────────────────────────────────────────────
+
+  spendStatPoint(stat) {
+    if (this.statPoints <= 0) return false;
+    if (!(stat in this.statAlloc)) return false;
+    this.statPoints--;
+    this.statAlloc[stat]++;
+
+    if (stat === 'agility') {
+      this.beeSpeedMult *= 1.04;
+      for (const ant of this.ants) ant.speed = Math.round(ant.beeType.speed * this.beeSpeedMult * (ant.statMult ?? 1));
+      this.player.sprite.body.setMaxVelocity(
+        this.player.sprite.body.maxVelocityX + 18,
+        this.player.sprite.body.maxVelocityY + 18,
+      );
+    } else if (stat === 'capacity') {
+      this.storageMax += 8;
+    } else if (stat === 'commerce') {
+      this.cashOutMult *= 1.15;
+    } else if (stat === 'fortune') {
+      this.playerLuck = (this.playerLuck ?? 0) + 6;
+    }
+
+    spawnFloatText(this, this.player.x, this.player.y - 44, `✨ ${stat.charAt(0).toUpperCase() + stat.slice(1)} ↑`, '#ffff44');
+    return true;
   }
 }

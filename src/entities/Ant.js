@@ -75,7 +75,7 @@ export default class Ant {
           if (this.targetField.isMarked)    { honey += 1; this.targetField.unmark(); }
           if (this.targetField.isBoosted)   { honey = Math.round(honey * this.targetField.bonusMult); }
           if (this.targetField.sproutCount > 0) { honey = Math.round(honey * this.targetField.sproutMult); }
-          honey = Math.round(honey * this.statMult);   // bond + gifted stat bonus
+          honey = Math.round(honey * this.statMult * (this.scene.dayHoneyMult ?? 1.0) * (this.scene.weatherHoneyMult ?? 1.0) * (this.scene.comboMult ?? 1.0)); // bond + day + weather + streak
           if (this.beeType.ability === 'gentle' && Math.random() < 0.5) {
             this.targetField.abandonField();
           } else {
@@ -126,8 +126,9 @@ export default class Ant {
   }
 
   _moveToward(tx, ty, delta) {
+    const speed = this.speed * (this.scene.weatherSpeedMult ?? 1.0);
     const angle = Phaser.Math.Angle.Between(this.sprite.x, this.sprite.y, tx, ty);
-    const dist  = Math.min(this.speed * delta * 0.001, this._distTo(tx, ty));
+    const dist  = Math.min(speed * delta * 0.001, this._distTo(tx, ty));
     this.sprite.x += Math.cos(angle) * dist;
     this.sprite.y += Math.sin(angle) * dist;
   }
