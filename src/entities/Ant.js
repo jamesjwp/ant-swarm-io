@@ -24,6 +24,8 @@ export default class Ant {
     this.speed         = beeType.speed;
     this.farmMs        = beeType.farmMs;
     this._pendingHoney = 0;
+    this.statMult      = 1.0;  // set by GameScene based on bond + gifted
+    this.entry         = null; // back-ref to ownedBees entry
 
     this.trailCheckTimer = Math.random() * TRAIL_CHECK_MS;
 
@@ -68,8 +70,12 @@ export default class Ant {
         this.targetField.setProgress(1 - this.stateTimer / this.farmMs);
         if (this.stateTimer <= 0) {
           let honey = this.beeType.honey;
-          if (this.targetField.isMarked)  { honey += 1; this.targetField.unmark(); }
-          if (this.targetField.isBoosted) { honey = Math.round(honey * this.targetField.bonusMult); }
+          // Zone multiplier (farther from hive = more honey)
+          honey = Math.round(honey * this.targetField.zone.honeyMult);
+          if (this.targetField.isMarked)    { honey += 1; this.targetField.unmark(); }
+          if (this.targetField.isBoosted)   { honey = Math.round(honey * this.targetField.bonusMult); }
+          if (this.targetField.sproutCount > 0) { honey = Math.round(honey * this.targetField.sproutMult); }
+          honey = Math.round(honey * this.statMult);   // bond + gifted stat bonus
           if (this.beeType.ability === 'gentle' && Math.random() < 0.5) {
             this.targetField.abandonField();
           } else {
@@ -90,6 +96,7 @@ export default class Ant {
             this._floatText('🍀 Fortune!', '#ffd700', this.scene.player.x, this.scene.player.y - 30);
           }
           this.scene.addHoney(honey, this.beeType.xpMult, this.scene.player.x, this.scene.player.y);
+          this.scene.addBond?.(this, 1);
           if (this.beeType.ability === 'scholar') {
             this.scene.spawnXpOrb(this.scene.player.x, this.scene.player.y);
           }

@@ -3,6 +3,7 @@ import GameScene from './scenes/GameScene';
 import UIScene   from './scenes/UIScene';
 import HiveScene from './scenes/HiveScene';
 import ShopScene from './scenes/ShopScene';
+import BearScene from './scenes/BearScene';
 import { createDevPanel } from './DevPanel.js';
 
 createDevPanel();
@@ -17,5 +18,5 @@ window.__game = new Phaser.Game({
     default: 'arcade',
     arcade:  { debug: false },
   },
-  scene: [GameScene, UIScene, HiveScene, ShopScene],
+  scene: [GameScene, UIScene, HiveScene, ShopScene, BearScene],
 });

@@ -1,5 +1,9 @@
+import { getZoneForY } from '../data/FieldZones.js';
+
 const REGEN_MS  = 12_000;
 const MARK_MS   = 20_000;
+const SPROUT_HARVESTS = 5;   // number of boosted harvests per sprout
+const SPROUT_MULT     = 2;   // honey multiplier while sprouted
 
 export default class FoodField {
   constructor(scene, x, y) {
@@ -7,25 +11,34 @@ export default class FoodField {
     this._x    = x;
     this._y    = y;
 
-    this.sprite = scene.add.image(x, y, 'flower-tiles').setDepth(1);
+    this.zone   = getZoneForY(y);
+    this.sprite = scene.add.image(x, y, 'flower-tiles').setDepth(1).setTint(this.zone.tint);
+
     this.assignedAnt  = null;
     this.isDepleted   = false;
     this._progressGfx = null;
     this._beeColor    = 0xf5c800;
 
-    this.isMarked  = false;
-    this._markGfx  = null;
+    this.isMarked   = false;
+    this._markGfx   = null;
     this._markTimer = null;
 
-    this.isBoosted  = false;
-    this.bonusMult  = 1;
-    this._bonusGfx  = null;
+    this.isBoosted   = false;
+    this.bonusMult   = 1;
+    this._bonusGfx   = null;
     this._bonusTimer = null;
+
+    this.sproutCount  = 0;
+    this._sproutGfx   = null;
+    this._blockingMob = null;   // set by Ladybug to prevent bee access
   }
 
   get x() { return this._x; }
   get y() { return this._y; }
-  get isAvailable() { return !this.isDepleted && this.assignedAnt === null; }
+  get isAvailable() { return !this.isDepleted && this.assignedAnt === null && !this._blockingMob; }
+
+  blockField(mob)  { this._blockingMob = mob; }
+  unblockField()   { this._blockingMob = null; }
 
   claim(ant) { this.assignedAnt = ant; }
 
@@ -48,6 +61,12 @@ export default class FoodField {
   finishFarming() {
     this.unmark();
     this.clearBonus();
+    // Consume one sprout charge
+    if (this.sproutCount > 0) {
+      this.sproutCount--;
+      if (this.sproutCount === 0) { this._sproutGfx?.destroy(); this._sproutGfx = null; }
+      else this._drawSprout();
+    }
     this.assignedAnt = null;
     if (this._progressGfx) this._progressGfx.clear();
     this._deplete();
@@ -57,6 +76,8 @@ export default class FoodField {
     this.assignedAnt = null;
     if (this._progressGfx) this._progressGfx.clear();
   }
+
+  // ── Mark (Scout ability) ────────────────────────────────────────────────
 
   mark() {
     this.isMarked = true;
@@ -72,6 +93,8 @@ export default class FoodField {
     if (this._markGfx) { this._markGfx.clear(); }
     if (this._markTimer) { this._markTimer.remove(); this._markTimer = null; }
   }
+
+  // ── Bonus token (global timed spawner) ─────────────────────────────────
 
   applyBonus(mult, durationMs) {
     this.isBoosted = true;
@@ -89,11 +112,48 @@ export default class FoodField {
     if (this._bonusTimer) { this._bonusTimer.remove(); this._bonusTimer = null; }
   }
 
+  // ── Sprout system ───────────────────────────────────────────────────────
+
+  plantSprout() {
+    if (this.isDepleted || this.sproutCount > 0) return false;
+    this.sproutCount = SPROUT_HARVESTS;
+    this._drawSprout();
+    return true;
+  }
+
+  get sproutMult() { return this.sproutCount > 0 ? SPROUT_MULT : 1; }
+
+  // ── Private draw helpers ────────────────────────────────────────────────
+
+  _drawSprout() {
+    if (!this._sproutGfx) this._sproutGfx = this.scene.add.graphics().setDepth(4);
+    const g = this._sproutGfx;
+    const x = this._x, y = this._y;
+    g.clear();
+    // Stem
+    g.fillStyle(0x22aa44, 1);
+    g.fillRect(x - 1, y - 14, 2, 10);
+    // Left leaf
+    g.fillStyle(0x44dd66, 1);
+    g.fillTriangle(x - 1, y - 10, x - 7, y - 14, x - 1, y - 14);
+    // Right leaf
+    g.fillTriangle(x + 1, y - 10, x + 7, y - 14, x + 1, y - 14);
+    // Tip bud
+    g.fillStyle(0x88ffaa, 1);
+    g.fillCircle(x, y - 14, 2);
+    // Harvest count badge
+    if (this.sproutCount > 1) {
+      g.fillStyle(0x004400, 0.85);
+      g.fillCircle(x + 7, y - 16, 4);
+      g.fillStyle(0xffffff, 1);
+      // Can't draw text on Graphics; we'll just leave the badge as a dot
+    }
+  }
+
   _drawBonus() {
     const g = this._bonusGfx;
     if (!g) return;
     g.clear();
-    // Golden star-like burst: 4 filled diamond shapes rotated
     g.fillStyle(0xffd700, 0.85);
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2;

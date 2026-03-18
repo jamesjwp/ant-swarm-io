@@ -56,3 +56,30 @@ export function getRandomBeeType() {
   }
   return types[0];
 }
+
+// Egg-tier weighted pools.
+//   basic  — common/uncommon bees (cheap egg)
+//   silver — uncommon/rare bees (mid egg)
+//   gold   — rare/legendary bees (premium egg)
+const EGG_POOLS = {
+  basic:  [{ t: 'worker', w: 80 }, { t: 'scout', w: 15 }, { t: 'harvester', w: 5 }],
+  silver: [{ t: 'scout', w: 30 }, { t: 'harvester', w: 40 }, { t: 'scholar', w: 25 }, { t: 'golden', w: 5 }],
+  gold:   [{ t: 'harvester', w: 15 }, { t: 'scholar', w: 50 }, { t: 'golden', w: 35 }],
+};
+
+// Returns bond level 0–5 for a bee inventory entry.
+// Each 100 bond XP = 1 level, capped at 5.
+export function getBondLevel(entry) {
+  return Math.min(5, Math.floor((entry?.bond ?? 0) / 100));
+}
+
+export function getEggBeeType(tier) {
+  const pool  = EGG_POOLS[tier] ?? EGG_POOLS.basic;
+  const total = pool.reduce((s, e) => s + e.w, 0);
+  let roll    = Math.random() * total;
+  for (const entry of pool) {
+    roll -= entry.w;
+    if (roll <= 0) return BEE_TYPES[entry.t];
+  }
+  return BEE_TYPES[pool[0].t];
+}
