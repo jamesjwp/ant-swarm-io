@@ -7,7 +7,7 @@ export default class Player {
     this.scene = scene;
     this._currentAnim = null;
 
-    this.sprite = scene.physics.add.sprite(x, y, 'idle-south-0');
+    this.sprite = scene.physics.add.sprite(x, y, 'bee-walk', 0);
     this.sprite.setScale(2);
     this.sprite.setCollideWorldBounds(true);
     this.sprite.body.setMaxVelocity(MAX_SPEED, MAX_SPEED);
@@ -38,13 +38,7 @@ export default class Player {
     const { x: vx, y: vy } = this.sprite.body.velocity;
     if (Math.hypot(vx, vy) < 20) { this._playAnim('idle-south'); return; }
     const dir = this._octant(Math.atan2(vy, vx));
-    const walk = { north:'walk-north', south:'walk-south', east:'walk-east', west:'walk-west' }[dir];
-    if (walk) {
-      this._playAnim(walk);
-    } else {
-      const rotKey = `rotate-${dir}`;
-      if (this._currentAnim !== rotKey) { this.sprite.stop(); this.sprite.setTexture(rotKey); this._currentAnim = rotKey; }
-    }
+    this._playAnim(`walk-${dir}`);
   }
 
   _playAnim(key) {

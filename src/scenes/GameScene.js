@@ -20,13 +20,7 @@ export default class GameScene extends Phaser.Scene {
   constructor() { super({ key: 'GameScene' }); }
 
   preload() {
-    for (const dir of ['north', 'south', 'east', 'west'])
-      for (let i = 0; i < 6; i++)
-        this.load.image(`walk-${dir}-${i}`, `assets/animations/walk/${dir}/frame_00${i}.png`);
-    for (let i = 0; i < 4; i++)
-      this.load.image(`idle-south-${i}`, `assets/animations/breathing-idle/south/frame_00${i}.png`);
-    for (const dir of ['north','north-east','east','south-east','south','south-west','west','north-west'])
-      this.load.image(`rotate-${dir}`, `assets/rotations/${dir}.png`);
+    this.load.spritesheet('bee-walk', 'assets/bee-walk.png', { frameWidth: 84, frameHeight: 84 });
     this.load.image('grass-bg',       'assets/tiles/grass-bg.png');
     this.load.image('flower-tiles',   'assets/tiles/flower-field.png');
     this.load.image('depleted-tiles', 'assets/tiles/depleted-field.png');
@@ -57,7 +51,7 @@ export default class GameScene extends Phaser.Scene {
     this.equipBee(workerEntry);
 
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
-    this.cameras.main.startFollow(this.player.sprite, true, 0.12, 0.12);
+    this.cameras.main.startFollow(this.player.sprite, true, 1, 1);
     this.scene.launch('UIScene');
   }
 
@@ -161,9 +155,15 @@ export default class GameScene extends Phaser.Scene {
   }
 
   _createAnims() {
-    for (const dir of ['north', 'south', 'east', 'west'])
-      this.anims.create({ key: `walk-${dir}`, frames: Array.from({ length: 6 }, (_, i) => ({ key: `walk-${dir}-${i}` })), frameRate: 10, repeat: -1 });
-    this.anims.create({ key: 'idle-south', frames: Array.from({ length: 4 }, (_, i) => ({ key: `idle-south-${i}` })), frameRate: 4, repeat: -1 });
+    const DIRS = {
+      'south':      [0, 0], 'south-east': [0, 1], 'east':       [0, 2],
+      'north-east': [1, 0], 'north':      [1, 1], 'north-west': [1, 2],
+      'west':       [2, 0], 'south-west': [2, 1],
+    };
+    for (const [dir, [r, c]] of Object.entries(DIRS))
+      this.anims.create({ key: `walk-${dir}`, frames: Array.from({ length: 6 }, (_, n) => ({ key: 'bee-walk', frame: r * 18 + c + n * 3 })), frameRate: 10, repeat: -1 });
+    const [r, c] = DIRS['south'];
+    this.anims.create({ key: 'idle-south', frames: Array.from({ length: 6 }, (_, n) => ({ key: 'bee-walk', frame: r * 18 + c + n * 3 })), frameRate: 6, repeat: -1 });
   }
 
   _generateTextures() {
